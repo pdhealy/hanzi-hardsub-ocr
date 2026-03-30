@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YouTube Chinese Reader</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <h1 class="popup-title">YouTube Chinese Reader</h1>
+  <div class="status-wrapper" role="status" aria-live="polite">
+    <span class="status-dot" id="status-dot"></span>
+    <span class="status-label" id="status-label">Inactive</span>
+  </div>
+  <hr class="divider">
+  <div class="buttons">
+    <button
+      id="btn-draw"
+      class="btn btn-secondary"
+      aria-label="Draw subtitle area on the YouTube video"
+    >Draw Subtitle Area</button>
+    <button
+      id="btn-recognize"
+      class="btn btn-primary"
+      aria-label="Recognize text in the drawn area"
+      disabled
+    >Recognize Text</button>
+  </div>
+  <script src="../dist/popup.bundle.js"></script>
+</body>
+</html>

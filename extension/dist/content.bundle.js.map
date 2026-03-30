@@ -1,7 +1,7 @@
 {
   "version": 3,
   "sources": ["../content/content.js"],
-  "sourcesContent": ["// Content script entry point - stub for build verification\nconsole.log('[YCR] content script stub');\n"],
-  "mappings": ";;AACA,UAAQ,IAAI,2BAA2B;",
+  "sourcesContent": ["// Content script entry point - injected into YouTube pages\n// Modules will be imported here in subsequent plans\n\nlet selectionBox = null; // Will hold selection coordinates {x, y, width, height}\nlet sidePanelVisible = false;\n\nchrome.runtime.onMessage.addListener((message, sender, sendResponse) => {\n  if (message.action === 'ACTIVATE_DRAW_MODE') {\n    console.log('[YCR] Draw mode activated (stub)');\n    sendResponse({ ok: true });\n  }\n  if (message.action === 'RECOGNIZE') {\n    console.log('[YCR] Recognize triggered (stub)');\n    sendResponse({ text: 'OCR not yet implemented' });\n    return true; // async\n  }\n  if (message.action === 'GET_STATUS') {\n    sendResponse({ boxDrawn: !!selectionBox });\n  }\n  if (message.action === 'SHOW_PANEL') {\n    console.log('[YCR] Show panel (stub)');\n    sendResponse({ ok: true });\n  }\n});\n\nconsole.log('[YCR] YouTube Chinese Reader content script loaded');\n"],
+  "mappings": ";;AAGA,MAAI,eAAe;AAGnB,SAAO,QAAQ,UAAU,YAAY,CAAC,SAAS,QAAQ,iBAAiB;AACtE,QAAI,QAAQ,WAAW,sBAAsB;AAC3C,cAAQ,IAAI,kCAAkC;AAC9C,mBAAa,EAAE,IAAI,KAAK,CAAC;AAAA,IAC3B;AACA,QAAI,QAAQ,WAAW,aAAa;AAClC,cAAQ,IAAI,kCAAkC;AAC9C,mBAAa,EAAE,MAAM,0BAA0B,CAAC;AAChD,aAAO;AAAA,IACT;AACA,QAAI,QAAQ,WAAW,cAAc;AACnC,mBAAa,EAAE,UAAU,CAAC,CAAC,aAAa,CAAC;AAAA,IAC3C;AACA,QAAI,QAAQ,WAAW,cAAc;AACnC,cAAQ,IAAI,yBAAyB;AACrC,mBAAa,EAAE,IAAI,KAAK,CAAC;AAAA,IAC3B;AAAA,EACF,CAAC;AAED,UAAQ,IAAI,oDAAoD;",
   "names": []
 }
