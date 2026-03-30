@@ -1,12 +1,19 @@
 // Content script entry point - injected into YouTube pages
-// Modules will be imported here in subsequent plans
+import { SelectionOverlay } from './overlay.js';
 
-let selectionBox = null; // Will hold selection coordinates {x, y, width, height}
+let overlay = null;
 let sidePanelVisible = false;
+
+function ensureOverlay() {
+  if (!overlay) {
+    overlay = new SelectionOverlay();
+  }
+  return overlay;
+}
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'ACTIVATE_DRAW_MODE') {
-    console.log('[YCR] Draw mode activated (stub)');
+    ensureOverlay().activateDrawMode();
     sendResponse({ ok: true });
   }
   if (message.action === 'RECOGNIZE') {
@@ -15,11 +22,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true; // async
   }
   if (message.action === 'GET_STATUS') {
-    sendResponse({ boxDrawn: !!selectionBox });
+    sendResponse({ boxDrawn: overlay ? overlay.hasSelection() : false });
   }
   if (message.action === 'SHOW_PANEL') {
     console.log('[YCR] Show panel (stub)');
     sendResponse({ ok: true });
+  }
+});
+
+document.addEventListener('yt-navigate-finish', () => {
+  if (overlay) {
+    overlay.destroy();
+    overlay = null;
   }
 });
 
