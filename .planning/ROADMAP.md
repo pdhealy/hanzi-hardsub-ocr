@@ -4,13 +4,13 @@
 
 - **Objective:** Establish the basic functionality of the extension.
 - **Goal:** Be able to manually trigger OCR on a static video frame and see the text output.
-- **Plans:** 2/4 plans executed
+- **Plans:** 4/4 plans complete
 
 Plans:
 - [x] 01-01-PLAN.md — Project scaffold, build toolchain, tesseract.js bundling, popup UI
 - [x] 01-02-PLAN.md — Selection box overlay with draw, resize, and coordinate tracking
 - [x] 01-03-PLAN.md — Injected side panel with display states and resize
-- [ ] 01-04-PLAN.md — OCR capture pipeline and full wiring (popup -> overlay -> OCR -> side panel)
+- [x] 01-04-PLAN.md — OCR capture pipeline and full wiring (popup -> overlay -> OCR -> side panel)
 
 **Requirements:**
 - REQ-OCR-ENGINE: tesseract.js integration for Chinese OCR
