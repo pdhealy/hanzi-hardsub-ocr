@@ -1,0 +1,21 @@
+{
+  "name": "youtube-chinese-reader",
+  "version": "1.0.0",
+  "description": "Chrome extension for OCR of hard-coded Chinese subtitles on YouTube videos",
+  "scripts": {
+    "build": "node esbuild.config.js",
+    "lint": "eslint extension/ --ext .js",
+    "watch": "node esbuild.config.js --watch"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "tesseract.js": "^7.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.27.4",
+    "eslint": "^10.1.0",
+    "globals": "^17.4.0"
+  }
+}

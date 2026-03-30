@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../content/content.js"],
+  "sourcesContent": ["// Content script entry point - stub for build verification\nconsole.log('[YCR] content script stub');\n"],
+  "mappings": ";;AACA,UAAQ,IAAI,2BAA2B;",
+  "names": []
+}
