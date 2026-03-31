@@ -83,7 +83,7 @@ function startLiveLoop() {
         if (videoEl2) {
           ensureSidePanel().appendEntry(getVideoTimestamp(videoEl2), '[Error: ' + err.message + ']');
         }
-      } catch (_) { /* ignore display errors */ }
+      } catch { /* ignore display errors */ }
     } finally {
       isTicking = false;
     }
