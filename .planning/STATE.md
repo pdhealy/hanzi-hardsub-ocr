@@ -2,30 +2,31 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 2
-current_plan: Not started
-status: Ready to plan
-stopped_at: Completed 01-04-PLAN.md
-last_updated: "2026-03-30T13:19:54.406Z"
+current_phase: 02
+current_plan: 2
+status: Executing Phase 02
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-03-31T02:25:00.000Z"
 progress:
   total_phases: 5
   completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
+  total_plans: 6
+  completed_plans: 5
 ---
 
 # Project State
 
 This file tracks the current state of the project.
 
-- **Current Phase:** 2
-- **Current Plan:** Not started
-- **Last Session:** 2026-03-30T13:16:00.000Z
-- **Stopped At:** Completed 01-04-PLAN.md
+- **Current Phase:** 02
+- **Current Plan:** 2
+- **Last Session:** 2026-03-31T02:25:00.000Z
+- **Stopped At:** Completed 02-01-PLAN.md
 
 ## Progress
 
 [==========] Phase 1: 4/4 plans complete
+[==        ] Phase 2: 1/2 plans complete
 
 ## Decisions
 
@@ -39,6 +40,9 @@ This file tracks the current state of the project.
 - [Phase 01]: SidePanel show/hide uses .ycr-visible class toggle (display:flex) rather than direct style manipulation
 - [Phase 01-04]: tesseract.min.js loaded via manifest content_scripts js array (UMD global) — avoids esbuild bundling complications with WASM worker
 - [Phase 01-04]: OCREngine lazy-initializes on first recognize() call — avoids expensive worker startup until user actually triggers OCR
+- [Phase 02-01]: Floating collapse tab is a DOM sibling of the panel (appended to document.body separately) so it remains visible when panel loses display:flex
+- [Phase 02-01]: Panel toggle button wired via setOnToggle(callback) injected from content.js — keeps chrome.runtime.sendMessage out of sidepanel.js (DOM-only module)
+- [Phase 02-01]: Guards added to all innerHTML-replacing state methods: if (this._listEl) return — prevents live list destruction during active OCR loop
 
 ## Performance Metrics
 
@@ -48,6 +52,7 @@ This file tracks the current state of the project.
 | 01    | 02   | 2 min    | 2     | 2 files |
 | 01    | 03   | 4 min    | 1     | 1 files |
 | 01    | 04   | 4 min    | 2     | 3 files |
+| 02    | 01   | 12 min   | 2     | 3 files |
 
 ## Blockers
 

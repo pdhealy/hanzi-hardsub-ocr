@@ -22,12 +22,20 @@ Plans:
 ## Phase 2: Real-time Synchronization and UI
 
 - **Objective:** Make the subtitle display dynamic and user-friendly.
-- **Tasks:**
-  - Implement a loop to continuously capture video frames and run OCR to create a real-time experience.
-  - Associate the recognized text with the current timestamp of the YouTube video.
-  - Enhance the side panel to be collapsible.
-  - Structure the display to show a list of subtitles with their timestamps.
 - **Goal:** Have a functional, real-time feed of subtitles in the side panel that keeps up with the video.
+- **Plans:** 1/2 plans executed
+
+Plans:
+- [x] 02-01-PLAN.md — Side panel: append-only entry list, floating collapse tab, in-panel toggle button
+- [ ] 02-02-PLAN.md — Live OCR loop in content.js, popup Start/Stop toggle with state sync
+
+**Requirements:**
+- REQ-REALTIME: Continuous OCR loop at 1-second interval
+- REQ-COLLAPSIBLE: Panel collapses to floating tab, re-expands on click
+- REQ-TIMESTAMPS: Each entry shows video timestamp
+- REQ-DEDUP: Consecutive identical results suppressed
+- REQ-TOGGLE: Start/Stop toggle in popup and side panel, synced
+- REQ-DISPLAY: Append-only running log of timestamped entries
 
 ## Phase 3: Settings and Customization
 
