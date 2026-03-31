@@ -23,11 +23,11 @@ Plans:
 
 - **Objective:** Make the subtitle display dynamic and user-friendly.
 - **Goal:** Have a functional, real-time feed of subtitles in the side panel that keeps up with the video.
-- **Plans:** 1/2 plans executed
+- **Plans:** 2/2 plans complete
 
 Plans:
 - [x] 02-01-PLAN.md — Side panel: append-only entry list, floating collapse tab, in-panel toggle button
-- [ ] 02-02-PLAN.md — Live OCR loop in content.js, popup Start/Stop toggle with state sync
+- [x] 02-02-PLAN.md — Live OCR loop in content.js, popup Start/Stop toggle with state sync
 
 **Requirements:**
 - REQ-REALTIME: Continuous OCR loop at 1-second interval
@@ -40,14 +40,15 @@ Plans:
 ## Phase 3: Settings and Customization
 
 - **Objective:** Allow users to personalize their viewing experience.
-- **Tasks:**
-  - Create the extension's settings page.
-  - Add controls on the settings page for adjusting:
-    - Font size
-    - Font color
-    - Background opacity
-  - Apply the user's chosen settings to the displayed subtitles in the side panel.
-- **Goal:** Enable users to customize the look and feel of the recognized subtitles.
+- **Plans:** 1/1 plans complete
+
+Plans:
+- [x] 03-01-PLAN.md — Settings options page (font size, font color, bg opacity) with chrome.storage.sync persistence and live SidePanel wiring
+
+**Requirements:**
+- REQ-SETTINGS-FONT: Font size and color controls in options page
+- REQ-SETTINGS-OPACITY: Panel background opacity control in options page
+- REQ-SETTINGS-PERSIST: Settings persisted via chrome.storage.sync and applied to SidePanel
 
 ## Phase 4: Exporting and Persistence
 
