@@ -221,6 +221,29 @@ const PANEL_STYLES = `
 #ycr-panel-collapse:hover {
   background: #E5E7EB;
 }
+
+#ycr-panel-settings {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 16px;
+  color: #6B7280;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+
+#ycr-panel-settings:hover {
+  background: #E5E7EB;
+}
+
+#ycr-panel-settings:focus {
+  outline: 2px solid #2563EB;
+  outline-offset: 2px;
+}
 `;
 
 function escapeHtml(text) {
@@ -277,6 +300,14 @@ export class SidePanel {
     collapseBtn.textContent = '\u2013'; // en-dash as minimize icon
     collapseBtn.addEventListener('click', () => this.collapse());
 
+    const settingsBtn = document.createElement('button');
+    settingsBtn.id = 'ycr-panel-settings';
+    settingsBtn.setAttribute('aria-label', 'Open Settings');
+    settingsBtn.textContent = '\u2699'; // gear icon
+    settingsBtn.addEventListener('click', () => {
+      chrome.runtime.sendMessage({ action: 'OPEN_SETTINGS' });
+    });
+
     const closeBtn = document.createElement('button');
     closeBtn.id = 'ycr-panel-close';
     closeBtn.setAttribute('aria-label', 'Hide Panel');
@@ -285,6 +316,7 @@ export class SidePanel {
 
     header.appendChild(title);
     header.appendChild(collapseBtn);
+    header.appendChild(settingsBtn);
     header.appendChild(closeBtn);
 
     // Content area
@@ -460,6 +492,19 @@ export class SidePanel {
       btn.textContent = 'Start Recognition';
       btn.classList.remove('ycr-toggle-active');
     }
+  }
+
+  /**
+   * Apply settings to the panel immediately (called from content.js storage listener).
+   * @param {{ fontSize: string|number, fontColor: string, bgOpacity: string|number }} settings
+   */
+  applySettings({ fontSize, fontColor, bgOpacity }) {
+    if (!this._panel) return;
+    this._applySettings({
+      ycrFontSize: typeof fontSize === 'string' ? parseFloat(fontSize) : fontSize,
+      ycrFontColor: fontColor,
+      ycrBgOpacity: typeof bgOpacity === 'string' ? parseFloat(bgOpacity) : bgOpacity,
+    });
   }
 
   /**
