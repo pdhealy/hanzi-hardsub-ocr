@@ -9,6 +9,12 @@ let overlay = null;
 let sidePanel = null;
 let ocrEngine = null;
 
+// Live OCR loop state
+let loopIntervalId = null;
+let isLooping = false;
+let isTicking = false;
+let lastRecognizedText = '';
+
 function ensureOverlay() {
   if (!overlay) overlay = new SelectionOverlay();
   return overlay;
@@ -24,6 +30,76 @@ function ensureOCR() {
   return ocrEngine;
 }
 
+function getVideoTimestamp(videoEl) {
+  const t = Math.floor(videoEl.currentTime);
+  const duration = videoEl.duration || 0;
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const s = t % 60;
+  const mm = String(m).padStart(2, '0');
+  const ss = String(s).padStart(2, '0');
+  return (duration >= 3600 || h > 0) ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
+function startLiveLoop() {
+  if (isLooping) return; // D-03: only one loop at a time
+  isLooping = true;
+
+  ensureSidePanel().show();
+
+  // Wire panel toggle button back to loop lifecycle (D-11)
+  ensureSidePanel().setOnToggle(() => {
+    if (isLooping) {
+      stopLiveLoop();
+      ensureSidePanel().updateToggleButton(false);
+    } else {
+      startLiveLoop();
+      ensureSidePanel().updateToggleButton(true);
+    }
+  });
+
+  loopIntervalId = setInterval(async () => {
+    if (isTicking) return; // overlap guard (Pitfall 1)
+    const videoEl = document.querySelector('#movie_player video');
+    if (!videoEl || videoEl.paused) return; // D-02: skip if paused
+    if (videoEl.readyState < 3) return; // buffering guard (Pitfall 6)
+    if (!overlay || !overlay.hasSelection()) return;
+
+    isTicking = true;
+    try {
+      const engine = ensureOCR();
+      const intrinsicRect = overlay.getVideoIntrinsicRect();
+      const result = await engine.recognize(videoEl, intrinsicRect);
+      const text = result.text;
+      if (text && text !== lastRecognizedText) { // D-05: dedup
+        lastRecognizedText = text;
+        const ts = getVideoTimestamp(videoEl);
+        ensureSidePanel().appendEntry(ts, text); // D-04
+      }
+    } catch (err) {
+      console.error('[YCR] Loop OCR error:', err);
+      try {
+        const videoEl2 = document.querySelector('#movie_player video');
+        if (videoEl2) {
+          ensureSidePanel().appendEntry(getVideoTimestamp(videoEl2), '[Error: ' + err.message + ']');
+        }
+      } catch (_) { /* ignore display errors */ }
+    } finally {
+      isTicking = false;
+    }
+  }, 1000); // D-01: 1-second interval
+}
+
+function stopLiveLoop() {
+  if (loopIntervalId !== null) {
+    clearInterval(loopIntervalId);
+    loopIntervalId = null;
+  }
+  isLooping = false;
+  isTicking = false;
+  lastRecognizedText = '';
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'ACTIVATE_DRAW_MODE') {
     ensureOverlay().activateDrawMode();
@@ -32,7 +108,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === 'GET_STATUS') {
-    sendResponse({ boxDrawn: overlay ? overlay.hasSelection() : false });
+    sendResponse({ boxDrawn: overlay ? overlay.hasSelection() : false, isLooping: isLooping });
+    return;
+  }
+
+  if (message.action === 'START_LIVE') {
+    startLiveLoop();
+    sendResponse({ ok: true, isLooping: true });
+    return;
+  }
+
+  if (message.action === 'STOP_LIVE') {
+    stopLiveLoop();
+    sendResponse({ ok: true, isLooping: false });
     return;
   }
 
@@ -95,6 +183,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // YouTube SPA navigation cleanup (per RESEARCH.md Pitfall 5)
 // yt-navigate-finish fires when the user navigates between YouTube videos.
 document.addEventListener('yt-navigate-finish', () => {
+  stopLiveLoop(); // MUST be first — clears interval before nulling modules (Pitfall 3)
   if (overlay) { overlay.destroy(); overlay = null; }
   if (sidePanel) { sidePanel.destroy(); sidePanel = null; }
   if (ocrEngine) { ocrEngine.terminate(); ocrEngine = null; }
