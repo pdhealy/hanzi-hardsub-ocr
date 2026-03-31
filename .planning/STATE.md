@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 current_phase: 03
-current_plan: 1
+current_plan: 2
 status: Executing Phase 03
-stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-03-31T12:04:00.000Z"
+stopped_at: Completed 03-02-PLAN.md
+last_updated: "2026-03-31T12:10:23Z"
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 7
-  completed_plans: 6
+  total_plans: 8
+  completed_plans: 7
 ---
 
 # Project State
@@ -19,15 +19,15 @@ progress:
 This file tracks the current state of the project.
 
 - **Current Phase:** 03
-- **Current Plan:** 1
-- **Last Session:** 2026-03-31T12:04:00.000Z
-- **Stopped At:** Completed 03-01-PLAN.md
+- **Current Plan:** 2
+- **Last Session:** 2026-03-31T12:10:23Z
+- **Stopped At:** Completed 03-02-PLAN.md
 
 ## Progress
 
 [==========] Phase 1: 4/4 plans complete
 [==========] Phase 2: 2/2 plans complete
-[==========] Phase 3: 1/1 plans complete
+[==========] Phase 3: 2/2 plans complete
 
 ## Decisions
 
@@ -47,6 +47,9 @@ This file tracks the current state of the project.
 - [Phase 03-01]: Options page JS loaded via plain <script> (not bundled) — extension options_page runs in privileged context with direct chrome.* API access
 - [Phase 03-01]: Settings injected as separate #ycr-entry-styles <style> element so PANEL_STYLES constant remains unchanged and styles can be replaced atomically
 - [Phase 03-01]: chrome.storage.onChanged listener re-fetches full settings from storage for consistency when multiple keys change simultaneously
+- [Phase 03-02]: Storage keys kept as camelCase (ycrFontSize/ycrFontColor/ycrBgOpacity) matching options.js — changing to underscore format would break existing settings page
+- [Phase 03-02]: Public applySettings() on SidePanel wraps _applySettings() to accept content.js callers without exposing internal key format
+- [Phase 03-02]: loadAndApplySettings() called at both SHOW_PANEL and startLiveLoop so settings apply before any entries render regardless of which code path shows the panel
 
 ## Performance Metrics
 
@@ -58,6 +61,7 @@ This file tracks the current state of the project.
 | 01    | 04   | 4 min    | 2     | 3 files |
 | 02    | 01   | 12 min   | 2     | 3 files |
 | 03    | 01   | 2 min    | 3     | 7 files |
+| 03    | 02   | 2 min    | 2     | 3 files |
 
 ## Blockers
 

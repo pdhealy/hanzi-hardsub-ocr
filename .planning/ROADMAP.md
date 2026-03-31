@@ -40,15 +40,18 @@ Plans:
 ## Phase 3: Settings and Customization
 
 - **Objective:** Allow users to personalize their viewing experience.
-- **Plans:** 1/1 plans complete
+- **Plans:** 2/2 plans complete
 
 Plans:
 - [x] 03-01-PLAN.md — Settings options page (font size, font color, bg opacity) with chrome.storage.sync persistence and live SidePanel wiring
+- [x] 03-02-PLAN.md — Gear icon in SidePanel header, public applySettings() method, chrome.storage.onChanged listener in content.js for real-time settings feedback loop
 
 **Requirements:**
 - REQ-SETTINGS-FONT: Font size and color controls in options page
 - REQ-SETTINGS-OPACITY: Panel background opacity control in options page
 - REQ-SETTINGS-PERSIST: Settings persisted via chrome.storage.sync and applied to SidePanel
+- REQ-SETTINGS-APPLY: applySettings() method on SidePanel wired from content.js storage listener
+- REQ-SETTINGS-REALTIME: Real-time settings feedback loop via chrome.storage.onChanged
 
 ## Phase 4: Exporting and Persistence
 
