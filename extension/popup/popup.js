@@ -46,28 +46,32 @@ btnDraw.addEventListener('click', async () => {
   }
 });
 
-// Recognize Text button
+// Recognize Text / Stop Recognition toggle button (D-10)
 btnRecognize.addEventListener('click', async () => {
-  setStatus('processing');
-
-  // Ensure the side panel is visible before OCR result arrives
-  await sendToContentScript({ action: 'SHOW_PANEL' });
-
-  const response = await sendToContentScript({ action: 'RECOGNIZE' });
-
-  if (response) {
+  const looping = btnRecognize.dataset.looping === 'true';
+  if (looping) {
+    await sendToContentScript({ action: 'STOP_LIVE' });
+    btnRecognize.textContent = 'Recognize Text';
+    btnRecognize.dataset.looping = 'false';
     setStatus('ready');
   } else {
-    // Response may be undefined if content script is not ready
-    setStatus('inactive');
+    await sendToContentScript({ action: 'START_LIVE' });
+    btnRecognize.textContent = 'Stop Recognition';
+    btnRecognize.dataset.looping = 'true';
+    setStatus('processing');
   }
 });
 
-// On popup open, check if a box is already drawn
+// On popup open, check if a box is already drawn and sync loop state (D-12)
 (async () => {
   const response = await sendToContentScript({ action: 'GET_STATUS' });
   if (response?.boxDrawn) {
     setStatus('ready');
     btnRecognize.disabled = false;
+  }
+  if (response?.isLooping) {
+    btnRecognize.textContent = 'Stop Recognition';
+    btnRecognize.dataset.looping = 'true';
+    setStatus('processing');
   }
 })();
