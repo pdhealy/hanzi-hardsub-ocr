@@ -53,7 +53,6 @@ const PANEL_STYLES = `
 }
 
 #ycr-panel-close {
-  margin-left: auto;
   width: 24px;
   height: 24px;
   border: none;
@@ -118,6 +117,110 @@ const PANEL_STYLES = `
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+#ycr-loop-controls {
+  padding: 0 0 12px 0;
+  border-bottom: 1px solid #E5E7EB;
+  margin-bottom: 12px;
+}
+
+.ycr-toggle-btn {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #D1D5DB;
+  border-radius: 6px;
+  background: #FFFFFF;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.ycr-toggle-btn:hover {
+  background: #F9FAFB;
+}
+
+.ycr-toggle-btn.ycr-toggle-active {
+  background: #EF4444;
+  color: #FFFFFF;
+  border-color: #EF4444;
+}
+
+.ycr-toggle-btn.ycr-toggle-active:hover {
+  background: #DC2626;
+}
+
+#ycr-entry-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ycr-entry {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #111827;
+  word-break: break-word;
+}
+
+.ycr-ts {
+  color: #6B7280;
+  font-size: 12px;
+  font-family: monospace;
+  margin-right: 6px;
+}
+
+.ycr-text {
+  white-space: pre-wrap;
+}
+
+#ycr-collapse-tab {
+  position: fixed;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 80px;
+  background: #2563EB;
+  color: #FFFFFF;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 6px 0 0 6px;
+  z-index: 9999;
+  font-family: system-ui, -apple-system, sans-serif;
+  user-select: none;
+}
+
+#ycr-collapse-tab.ycr-tab-visible {
+  display: flex;
+}
+
+#ycr-panel-collapse {
+  margin-left: auto;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 16px;
+  color: #6B7280;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+
+#ycr-panel-collapse:hover {
+  background: #E5E7EB;
+}
 `;
 
 function escapeHtml(text) {
@@ -129,6 +232,10 @@ export class SidePanel {
     this._panel = null;
     this._styleEl = null;
     this._onNavigate = null;
+    this._listEl = null;
+    this._collapsed = false;
+    this._tab = null;
+    this._onToggle = null;
     this._init();
   }
 
@@ -156,6 +263,12 @@ export class SidePanel {
     title.id = 'ycr-panel-title';
     title.textContent = 'YouTube Chinese Reader';
 
+    const collapseBtn = document.createElement('button');
+    collapseBtn.id = 'ycr-panel-collapse';
+    collapseBtn.setAttribute('aria-label', 'Collapse Panel');
+    collapseBtn.textContent = '\u2013'; // en-dash as minimize icon
+    collapseBtn.addEventListener('click', () => this.collapse());
+
     const closeBtn = document.createElement('button');
     closeBtn.id = 'ycr-panel-close';
     closeBtn.setAttribute('aria-label', 'Hide Panel');
@@ -163,6 +276,7 @@ export class SidePanel {
     closeBtn.addEventListener('click', () => this.hide());
 
     header.appendChild(title);
+    header.appendChild(collapseBtn);
     header.appendChild(closeBtn);
 
     // Content area
@@ -172,6 +286,14 @@ export class SidePanel {
 
     panel.appendChild(header);
     panel.appendChild(content);
+
+    // Create the floating collapse tab (sibling to panel, not child)
+    const tab = document.createElement('div');
+    tab.id = 'ycr-collapse-tab';
+    tab.textContent = 'YCR';
+    tab.addEventListener('click', () => this.expand());
+    document.body.appendChild(tab);
+    this._tab = tab;
 
     document.body.appendChild(panel);
     this._panel = panel;
@@ -223,14 +345,99 @@ export class SidePanel {
     if (this._panel) {
       this._panel.classList.remove('ycr-visible');
     }
+    if (this._tab) {
+      this._tab.classList.remove('ycr-tab-visible');
+    }
+    this._collapsed = false;
+  }
+
+  collapse() {
+    if (this._panel) {
+      this._panel.classList.remove('ycr-visible');
+    }
+    if (this._tab) {
+      this._tab.classList.add('ycr-tab-visible');
+    }
+    this._collapsed = true;
+  }
+
+  expand() {
+    if (this._panel) {
+      this._panel.classList.add('ycr-visible');
+    }
+    if (this._tab) {
+      this._tab.classList.remove('ycr-tab-visible');
+    }
+    this._collapsed = false;
   }
 
   isVisible() {
     return this._panel ? this._panel.classList.contains('ycr-visible') : false;
   }
 
+  appendEntry(timestamp, text) {
+    if (!this._content) return;
+
+    // Initialize list container on first entry
+    if (!this._listEl) {
+      this._content.innerHTML = '';
+
+      // Panel-level Start/Stop toggle (D-11)
+      const controls = document.createElement('div');
+      controls.id = 'ycr-loop-controls';
+      const toggleBtn = document.createElement('button');
+      toggleBtn.id = 'ycr-panel-toggle';
+      toggleBtn.className = 'ycr-toggle-btn ycr-toggle-active';
+      toggleBtn.textContent = 'Stop Recognition';
+      toggleBtn.addEventListener('click', () => {
+        if (this._onToggle) {
+          this._onToggle();
+        }
+      });
+      controls.appendChild(toggleBtn);
+      this._content.appendChild(controls);
+
+      const list = document.createElement('div');
+      list.id = 'ycr-entry-list';
+      this._content.appendChild(list);
+      this._listEl = list;
+    }
+
+    const entry = document.createElement('div');
+    entry.className = 'ycr-entry';
+    entry.innerHTML = `<span class="ycr-ts">[${escapeHtml(timestamp)}]</span> <span class="ycr-text">${escapeHtml(text)}</span>`;
+    this._listEl.appendChild(entry);
+
+    entry.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }
+
+  clearEntries() {
+    this._listEl = null;
+    if (this._content) {
+      this._content.innerHTML = '';
+    }
+  }
+
+  setOnToggle(callback) {
+    this._onToggle = callback;
+  }
+
+  updateToggleButton(isLooping) {
+    if (!this._content) return;
+    const btn = this._content.querySelector('#ycr-panel-toggle');
+    if (!btn) return;
+    if (isLooping) {
+      btn.textContent = 'Stop Recognition';
+      btn.classList.add('ycr-toggle-active');
+    } else {
+      btn.textContent = 'Start Recognition';
+      btn.classList.remove('ycr-toggle-active');
+    }
+  }
+
   showLoading() {
     if (!this._content) return;
+    if (this._listEl) return;
     this._content.innerHTML = `
       <div class="ycr-state" aria-busy="true">
         <div class="ycr-spinner"></div>
@@ -242,11 +449,13 @@ export class SidePanel {
 
   showText(text) {
     if (!this._content) return;
+    if (this._listEl) return;
     this._content.innerHTML = `<div class="ycr-ocr-output">${escapeHtml(text)}</div>`;
   }
 
   showEmpty() {
     if (!this._content) return;
+    if (this._listEl) return;
     this._content.innerHTML = `
       <div class="ycr-state">
         <div class="ycr-state-heading" style="font-size: 13px; font-weight: 400; line-height: 1.4; color: #6B7280;">No text recognized</div>
@@ -257,6 +466,7 @@ export class SidePanel {
 
   showNoSelection() {
     if (!this._content) return;
+    if (this._listEl) return;
     this._content.innerHTML = `
       <div class="ycr-state">
         <div class="ycr-state-heading" style="font-size: 13px; font-weight: 400; line-height: 1.4; color: #6B7280;">No area selected</div>
@@ -267,6 +477,7 @@ export class SidePanel {
 
   showError(message) {
     if (!this._content) return;
+    if (this._listEl) return;
     this._content.innerHTML = `
       <div class="ycr-state">
         <div class="ycr-state-heading" style="font-size: 13px; font-weight: 400; line-height: 1.4; color: #6B7280;">Recognition failed</div>
@@ -281,6 +492,10 @@ export class SidePanel {
       window.removeEventListener('yt-navigate-finish', this._onNavigate);
       this._onNavigate = null;
     }
+    if (this._tab && this._tab.parentNode) {
+      this._tab.parentNode.removeChild(this._tab);
+    }
+    this._tab = null;
     if (this._panel && this._panel.parentNode) {
       this._panel.parentNode.removeChild(this._panel);
     }
@@ -290,5 +505,8 @@ export class SidePanel {
     this._panel = null;
     this._content = null;
     this._styleEl = null;
+    this._listEl = null;
+    this._collapsed = false;
+    this._onToggle = null;
   }
 }
