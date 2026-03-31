@@ -15,6 +15,29 @@ let isLooping = false;
 let isTicking = false;
 let lastRecognizedText = '';
 
+// Settings defaults — must match keys used by extension/options/options.js
+const SETTINGS_DEFAULTS = { ycrFontSize: 14, ycrFontColor: '#111827', ycrBgOpacity: 1.0 };
+const SETTING_KEYS = ['ycrFontSize', 'ycrFontColor', 'ycrBgOpacity'];
+
+function loadAndApplySettings() {
+  chrome.storage.sync.get(SETTINGS_DEFAULTS, (settings) => {
+    if (sidePanel) {
+      sidePanel.applySettings({
+        fontSize: settings.ycrFontSize,
+        fontColor: settings.ycrFontColor,
+        bgOpacity: settings.ycrBgOpacity,
+      });
+    }
+  });
+}
+
+// Real-time settings sync — re-apply whenever any setting key changes in storage
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'sync') return;
+  if (!SETTING_KEYS.some(k => k in changes)) return;
+  loadAndApplySettings();
+});
+
 function ensureOverlay() {
   if (!overlay) overlay = new SelectionOverlay();
   return overlay;
@@ -46,6 +69,7 @@ function startLiveLoop() {
   isLooping = true;
 
   ensureSidePanel().show();
+  loadAndApplySettings();
 
   // Wire panel toggle button back to loop lifecycle (D-11)
   ensureSidePanel().setOnToggle(() => {
@@ -127,6 +151,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'SHOW_PANEL') {
     const panel = ensureSidePanel();
     panel.show();
+    loadAndApplySettings();
     if (!overlay || !overlay.hasSelection()) {
       panel.showNoSelection();
     }

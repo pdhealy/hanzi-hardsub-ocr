@@ -968,6 +968,24 @@
   var isLooping = false;
   var isTicking = false;
   var lastRecognizedText = "";
+  var SETTINGS_DEFAULTS = { ycrFontSize: 14, ycrFontColor: "#111827", ycrBgOpacity: 1 };
+  var SETTING_KEYS = ["ycrFontSize", "ycrFontColor", "ycrBgOpacity"];
+  function loadAndApplySettings() {
+    chrome.storage.sync.get(SETTINGS_DEFAULTS, (settings) => {
+      if (sidePanel) {
+        sidePanel.applySettings({
+          fontSize: settings.ycrFontSize,
+          fontColor: settings.ycrFontColor,
+          bgOpacity: settings.ycrBgOpacity
+        });
+      }
+    });
+  }
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "sync") return;
+    if (!SETTING_KEYS.some((k) => k in changes)) return;
+    loadAndApplySettings();
+  });
   function ensureOverlay() {
     if (!overlay) overlay = new SelectionOverlay();
     return overlay;
@@ -994,6 +1012,7 @@
     if (isLooping) return;
     isLooping = true;
     ensureSidePanel().show();
+    loadAndApplySettings();
     ensureSidePanel().setOnToggle(() => {
       if (isLooping) {
         stopLiveLoop();
@@ -1066,6 +1085,7 @@
     if (message.action === "SHOW_PANEL") {
       const panel = ensureSidePanel();
       panel.show();
+      loadAndApplySettings();
       if (!overlay || !overlay.hasSelection()) {
         panel.showNoSelection();
       }
