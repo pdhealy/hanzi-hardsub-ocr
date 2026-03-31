@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YouTube Chinese Reader — Settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="settings-card">
+    <h1 class="settings-title">YouTube Chinese Reader</h1>
+    <p class="settings-subtitle">Customize the appearance of recognized subtitles</p>
+
+    <hr class="divider">
+
+    <div class="settings-group">
+      <label class="settings-label" for="font-size">
+        Font Size
+        <span class="settings-readout" id="font-size-val">14px</span>
+      </label>
+      <input
+        type="range"
+        id="font-size"
+        class="settings-range"
+        min="12"
+        max="28"
+        step="1"
+        value="14"
+        aria-label="Font size"
+      >
+      <div class="range-bounds">
+        <span>12px</span>
+        <span>28px</span>
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <label class="settings-label" for="font-color">
+        Font Color
+      </label>
+      <div class="color-row">
+        <input
+          type="color"
+          id="font-color"
+          class="settings-color"
+          value="#111827"
+          aria-label="Font color"
+        >
+        <span class="color-hint" id="font-color-hint">#111827</span>
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <label class="settings-label" for="bg-opacity">
+        Panel Background Opacity
+        <span class="settings-readout" id="bg-opacity-val">1.0</span>
+      </label>
+      <input
+        type="range"
+        id="bg-opacity"
+        class="settings-range"
+        min="0.1"
+        max="1"
+        step="0.05"
+        value="1"
+        aria-label="Panel background opacity"
+      >
+      <div class="range-bounds">
+        <span>0.1 (transparent)</span>
+        <span>1.0 (opaque)</span>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <div class="save-row">
+      <button id="btn-save" class="btn btn-primary">Save Settings</button>
+      <span id="save-status" class="save-status" aria-live="polite"></span>
+    </div>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>
