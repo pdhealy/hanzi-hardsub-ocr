@@ -8,6 +8,7 @@
   "background": {
     "service_worker": "background/service-worker.js"
   },
+  "options_page": "options/options.html",
   "action": {
     "default_popup": "popup/popup.html",
     "default_icon": {

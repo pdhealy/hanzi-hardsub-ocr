@@ -227,15 +227,23 @@ function escapeHtml(text) {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+const DEFAULT_SETTINGS = {
+  ycrFontSize: 14,
+  ycrFontColor: '#111827',
+  ycrBgOpacity: 1.0,
+};
+
 export class SidePanel {
   constructor() {
     this._panel = null;
     this._styleEl = null;
+    this._entryStyleEl = null;
     this._onNavigate = null;
     this._listEl = null;
     this._collapsed = false;
     this._tab = null;
     this._onToggle = null;
+    this._onStorageChange = null;
     this._init();
   }
 
@@ -305,6 +313,25 @@ export class SidePanel {
     // SPA navigation cleanup
     this._onNavigate = () => this.destroy();
     window.addEventListener('yt-navigate-finish', this._onNavigate);
+
+    // Load persisted settings and listen for future changes
+    this.loadSettings();
+    this._onStorageChange = (changes) => {
+      const keys = ['ycrFontSize', 'ycrFontColor', 'ycrBgOpacity'];
+      if (keys.some((k) => k in changes)) {
+        const updated = {};
+        for (const k of keys) {
+          if (changes[k]) {
+            updated[k] = changes[k].newValue;
+          }
+        }
+        // Merge with defaults then apply
+        chrome.storage.sync.get(DEFAULT_SETTINGS, (settings) => {
+          this._applySettings(settings);
+        });
+      }
+    };
+    chrome.storage.onChanged.addListener(this._onStorageChange);
   }
 
   _initResize(handle, panel) {
@@ -435,6 +462,38 @@ export class SidePanel {
     }
   }
 
+  /**
+   * Load settings from chrome.storage.sync and apply them to the panel.
+   */
+  loadSettings() {
+    chrome.storage.sync.get(DEFAULT_SETTINGS, (settings) => {
+      this._applySettings(settings);
+    });
+  }
+
+  /**
+   * Inject a <style> element with per-settings CSS overrides into document.head.
+   * Creates #ycr-entry-styles if absent; replaces its content on each call.
+   * @param {{ ycrFontSize: number, ycrFontColor: string, ycrBgOpacity: number }} settings
+   */
+  _applySettings(settings) {
+    const fontSize = settings.ycrFontSize || DEFAULT_SETTINGS.ycrFontSize;
+    const fontColor = settings.ycrFontColor || DEFAULT_SETTINGS.ycrFontColor;
+    const bgOpacity = settings.ycrBgOpacity != null ? settings.ycrBgOpacity : DEFAULT_SETTINGS.ycrBgOpacity;
+
+    const css = `
+.ycr-entry .ycr-text { font-size: ${fontSize}px; color: ${fontColor}; }
+#ycr-side-panel { background: rgba(255, 255, 255, ${bgOpacity}); }
+`;
+
+    if (!this._entryStyleEl) {
+      this._entryStyleEl = document.createElement('style');
+      this._entryStyleEl.id = 'ycr-entry-styles';
+      document.head.appendChild(this._entryStyleEl);
+    }
+    this._entryStyleEl.textContent = css;
+  }
+
   showLoading() {
     if (!this._content) return;
     if (this._listEl) return;
@@ -492,6 +551,10 @@ export class SidePanel {
       window.removeEventListener('yt-navigate-finish', this._onNavigate);
       this._onNavigate = null;
     }
+    if (this._onStorageChange) {
+      chrome.storage.onChanged.removeListener(this._onStorageChange);
+      this._onStorageChange = null;
+    }
     if (this._tab && this._tab.parentNode) {
       this._tab.parentNode.removeChild(this._tab);
     }
@@ -502,9 +565,13 @@ export class SidePanel {
     if (this._styleEl && this._styleEl.parentNode) {
       this._styleEl.parentNode.removeChild(this._styleEl);
     }
+    if (this._entryStyleEl && this._entryStyleEl.parentNode) {
+      this._entryStyleEl.parentNode.removeChild(this._entryStyleEl);
+    }
     this._panel = null;
     this._content = null;
     this._styleEl = null;
+    this._entryStyleEl = null;
     this._listEl = null;
     this._collapsed = false;
     this._onToggle = null;

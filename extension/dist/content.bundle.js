@@ -544,15 +544,22 @@
   function escapeHtml(text) {
     return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
+  var DEFAULT_SETTINGS = {
+    ycrFontSize: 14,
+    ycrFontColor: "#111827",
+    ycrBgOpacity: 1
+  };
   var SidePanel = class {
     constructor() {
       this._panel = null;
       this._styleEl = null;
+      this._entryStyleEl = null;
       this._onNavigate = null;
       this._listEl = null;
       this._collapsed = false;
       this._tab = null;
       this._onToggle = null;
+      this._onStorageChange = null;
       this._init();
     }
     _init() {
@@ -600,6 +607,22 @@
       this._initResize(handle, panel);
       this._onNavigate = () => this.destroy();
       window.addEventListener("yt-navigate-finish", this._onNavigate);
+      this.loadSettings();
+      this._onStorageChange = (changes) => {
+        const keys = ["ycrFontSize", "ycrFontColor", "ycrBgOpacity"];
+        if (keys.some((k) => k in changes)) {
+          const updated = {};
+          for (const k of keys) {
+            if (changes[k]) {
+              updated[k] = changes[k].newValue;
+            }
+          }
+          chrome.storage.sync.get(DEFAULT_SETTINGS, (settings) => {
+            this._applySettings(settings);
+          });
+        }
+      };
+      chrome.storage.onChanged.addListener(this._onStorageChange);
     }
     _initResize(handle, panel) {
       let isResizing = false;
@@ -696,17 +719,45 @@
     setOnToggle(callback) {
       this._onToggle = callback;
     }
-    updateToggleButton(isLooping) {
+    updateToggleButton(isLooping2) {
       if (!this._content) return;
       const btn = this._content.querySelector("#ycr-panel-toggle");
       if (!btn) return;
-      if (isLooping) {
+      if (isLooping2) {
         btn.textContent = "Stop Recognition";
         btn.classList.add("ycr-toggle-active");
       } else {
         btn.textContent = "Start Recognition";
         btn.classList.remove("ycr-toggle-active");
       }
+    }
+    /**
+     * Load settings from chrome.storage.sync and apply them to the panel.
+     */
+    loadSettings() {
+      chrome.storage.sync.get(DEFAULT_SETTINGS, (settings) => {
+        this._applySettings(settings);
+      });
+    }
+    /**
+     * Inject a <style> element with per-settings CSS overrides into document.head.
+     * Creates #ycr-entry-styles if absent; replaces its content on each call.
+     * @param {{ ycrFontSize: number, ycrFontColor: string, ycrBgOpacity: number }} settings
+     */
+    _applySettings(settings) {
+      const fontSize = settings.ycrFontSize || DEFAULT_SETTINGS.ycrFontSize;
+      const fontColor = settings.ycrFontColor || DEFAULT_SETTINGS.ycrFontColor;
+      const bgOpacity = settings.ycrBgOpacity != null ? settings.ycrBgOpacity : DEFAULT_SETTINGS.ycrBgOpacity;
+      const css = `
+.ycr-entry .ycr-text { font-size: ${fontSize}px; color: ${fontColor}; }
+#ycr-side-panel { background: rgba(255, 255, 255, ${bgOpacity}); }
+`;
+      if (!this._entryStyleEl) {
+        this._entryStyleEl = document.createElement("style");
+        this._entryStyleEl.id = "ycr-entry-styles";
+        document.head.appendChild(this._entryStyleEl);
+      }
+      this._entryStyleEl.textContent = css;
     }
     showLoading() {
       if (!this._content) return;
@@ -760,6 +811,10 @@
         window.removeEventListener("yt-navigate-finish", this._onNavigate);
         this._onNavigate = null;
       }
+      if (this._onStorageChange) {
+        chrome.storage.onChanged.removeListener(this._onStorageChange);
+        this._onStorageChange = null;
+      }
       if (this._tab && this._tab.parentNode) {
         this._tab.parentNode.removeChild(this._tab);
       }
@@ -770,9 +825,13 @@
       if (this._styleEl && this._styleEl.parentNode) {
         this._styleEl.parentNode.removeChild(this._styleEl);
       }
+      if (this._entryStyleEl && this._entryStyleEl.parentNode) {
+        this._entryStyleEl.parentNode.removeChild(this._entryStyleEl);
+      }
       this._panel = null;
       this._content = null;
       this._styleEl = null;
+      this._entryStyleEl = null;
       this._listEl = null;
       this._collapsed = false;
       this._onToggle = null;
@@ -862,6 +921,10 @@
   var overlay = null;
   var sidePanel = null;
   var ocrEngine = null;
+  var loopIntervalId = null;
+  var isLooping = false;
+  var isTicking = false;
+  var lastRecognizedText = "";
   function ensureOverlay() {
     if (!overlay) overlay = new SelectionOverlay();
     return overlay;
@@ -874,6 +937,69 @@
     if (!ocrEngine) ocrEngine = new OCREngine();
     return ocrEngine;
   }
+  function getVideoTimestamp(videoEl) {
+    const t = Math.floor(videoEl.currentTime);
+    const duration = videoEl.duration || 0;
+    const h = Math.floor(t / 3600);
+    const m = Math.floor(t % 3600 / 60);
+    const s = t % 60;
+    const mm = String(m).padStart(2, "0");
+    const ss = String(s).padStart(2, "0");
+    return duration >= 3600 || h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+  }
+  function startLiveLoop() {
+    if (isLooping) return;
+    isLooping = true;
+    ensureSidePanel().show();
+    ensureSidePanel().setOnToggle(() => {
+      if (isLooping) {
+        stopLiveLoop();
+        ensureSidePanel().updateToggleButton(false);
+      } else {
+        startLiveLoop();
+        ensureSidePanel().updateToggleButton(true);
+      }
+    });
+    loopIntervalId = setInterval(async () => {
+      if (isTicking) return;
+      const videoEl = document.querySelector("#movie_player video");
+      if (!videoEl || videoEl.paused) return;
+      if (videoEl.readyState < 3) return;
+      if (!overlay || !overlay.hasSelection()) return;
+      isTicking = true;
+      try {
+        const engine = ensureOCR();
+        const intrinsicRect = overlay.getVideoIntrinsicRect();
+        const result = await engine.recognize(videoEl, intrinsicRect);
+        const text = result.text;
+        if (text && text !== lastRecognizedText) {
+          lastRecognizedText = text;
+          const ts = getVideoTimestamp(videoEl);
+          ensureSidePanel().appendEntry(ts, text);
+        }
+      } catch (err) {
+        console.error("[YCR] Loop OCR error:", err);
+        try {
+          const videoEl2 = document.querySelector("#movie_player video");
+          if (videoEl2) {
+            ensureSidePanel().appendEntry(getVideoTimestamp(videoEl2), "[Error: " + err.message + "]");
+          }
+        } catch {
+        }
+      } finally {
+        isTicking = false;
+      }
+    }, 1e3);
+  }
+  function stopLiveLoop() {
+    if (loopIntervalId !== null) {
+      clearInterval(loopIntervalId);
+      loopIntervalId = null;
+    }
+    isLooping = false;
+    isTicking = false;
+    lastRecognizedText = "";
+  }
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === "ACTIVATE_DRAW_MODE") {
       ensureOverlay().activateDrawMode();
@@ -881,7 +1007,17 @@
       return;
     }
     if (message.action === "GET_STATUS") {
-      sendResponse({ boxDrawn: overlay ? overlay.hasSelection() : false });
+      sendResponse({ boxDrawn: overlay ? overlay.hasSelection() : false, isLooping });
+      return;
+    }
+    if (message.action === "START_LIVE") {
+      startLiveLoop();
+      sendResponse({ ok: true, isLooping: true });
+      return;
+    }
+    if (message.action === "STOP_LIVE") {
+      stopLiveLoop();
+      sendResponse({ ok: true, isLooping: false });
       return;
     }
     if (message.action === "SHOW_PANEL") {
@@ -930,6 +1066,7 @@
     }
   });
   document.addEventListener("yt-navigate-finish", () => {
+    stopLiveLoop();
     if (overlay) {
       overlay.destroy();
       overlay = null;

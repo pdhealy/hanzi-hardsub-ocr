@@ -33,13 +33,17 @@
     }
   });
   btnRecognize.addEventListener("click", async () => {
-    setStatus("processing");
-    await sendToContentScript({ action: "SHOW_PANEL" });
-    const response = await sendToContentScript({ action: "RECOGNIZE" });
-    if (response) {
+    const looping = btnRecognize.dataset.looping === "true";
+    if (looping) {
+      await sendToContentScript({ action: "STOP_LIVE" });
+      btnRecognize.textContent = "Recognize Text";
+      btnRecognize.dataset.looping = "false";
       setStatus("ready");
     } else {
-      setStatus("inactive");
+      await sendToContentScript({ action: "START_LIVE" });
+      btnRecognize.textContent = "Stop Recognition";
+      btnRecognize.dataset.looping = "true";
+      setStatus("processing");
     }
   });
   (async () => {
@@ -47,6 +51,11 @@
     if (response?.boxDrawn) {
       setStatus("ready");
       btnRecognize.disabled = false;
+    }
+    if (response?.isLooping) {
+      btnRecognize.textContent = "Stop Recognition";
+      btnRecognize.dataset.looping = "true";
+      setStatus("processing");
     }
   })();
 })();
