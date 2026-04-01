@@ -14,6 +14,9 @@ async function ensureOffscreenDocument() {
     reasons: ['WORKERS'],
     justification: 'Run OCR worker outside page CSP restrictions',
   });
+
+  // Give the offscreen document time to load and execute its scripts
+  await new Promise(resolve => setTimeout(resolve, 500));
 }
 
 chrome.runtime.onInstalled.addListener(() => {
