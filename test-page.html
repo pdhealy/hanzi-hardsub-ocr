@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Extension Test Page</title>
+</head>
+<body>
+    <h1>YouTube Chinese Reader Extension Test</h1>
+    <div id="movie_player">
+        <video id="test-video" width="640" height="360" controls>
+            <source src="data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAACKBtZGF0AAAC" type="video/mp4">
+        </video>
+    </div>
+    
+    <div id="test-info">
+        <h2>Test Results:</h2>
+        <div id="extension-status">Checking extension...</div>
+        <div id="ocr-test"></div>
+    </div>
+
+    <script>
+        console.log('[TEST] Page loaded');
+        
+        // Check if extension is loaded
+        setTimeout(() => {
+            const status = document.getElementById('extension-status');
+            if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
+                status.textContent = '✓ Extension context available';
+                console.log('[TEST] Extension ID:', chrome.runtime.id);
+            } else {
+                status.textContent = '✗ Extension not detected';
+            }
+        }, 1000);
+    </script>
+</body>
+</html>
