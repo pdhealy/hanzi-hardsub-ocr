@@ -55,20 +55,21 @@ export class SelectionOverlay {
     document.body.appendChild(container);
     this._container = container;
 
+    // Set initial styles — pointer-events and cursor are managed separately
+    // by activateDrawMode/deactivateDrawMode so they are NOT set here.
+    container.style.position = 'fixed';
+    container.style.zIndex = '2147483646';
+    container.style.pointerEvents = 'none';
+
     // Position the container over the video element using fixed coordinates.
-    // This avoids dependence on #movie_player's positioning context and ensures
-    // the drawable area is always constrained to the video element itself.
+    // Only updates geometry — never touches pointer-events or cursor, so draw
+    // mode state is not clobbered when the ResizeObserver fires.
     const updatePosition = () => {
       const rect = this._videoEl.getBoundingClientRect();
-      container.style.cssText = [
-        'position: fixed',
-        `top: ${rect.top}px`,
-        `left: ${rect.left}px`,
-        `width: ${rect.width}px`,
-        `height: ${rect.height}px`,
-        'z-index: 2147483646',
-        'pointer-events: none',
-      ].join('; ');
+      container.style.top = `${rect.top}px`;
+      container.style.left = `${rect.left}px`;
+      container.style.width = `${rect.width}px`;
+      container.style.height = `${rect.height}px`;
     };
 
     updatePosition();

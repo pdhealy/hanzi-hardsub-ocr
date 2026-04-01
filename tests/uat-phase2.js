@@ -317,7 +317,6 @@ async function main() {
   console.log('========================================');
 
   const browser = await chromium.launch({
-    executablePath: '/usr/bin/chromium',
     headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
   });

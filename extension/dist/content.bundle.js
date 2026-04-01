@@ -41,17 +41,15 @@
       container.id = "ycr-overlay-container";
       document.body.appendChild(container);
       this._container = container;
+      container.style.position = "fixed";
+      container.style.zIndex = "2147483646";
+      container.style.pointerEvents = "none";
       const updatePosition = () => {
         const rect = this._videoEl.getBoundingClientRect();
-        container.style.cssText = [
-          "position: fixed",
-          `top: ${rect.top}px`,
-          `left: ${rect.left}px`,
-          `width: ${rect.width}px`,
-          `height: ${rect.height}px`,
-          "z-index: 2147483646",
-          "pointer-events: none"
-        ].join("; ");
+        container.style.top = `${rect.top}px`;
+        container.style.left = `${rect.left}px`;
+        container.style.width = `${rect.width}px`;
+        container.style.height = `${rect.height}px`;
       };
       updatePosition();
       this._resizeObserver = new ResizeObserver(updatePosition);
