@@ -115,7 +115,7 @@ async function ensureWorker() {
         corePath,
         langPath,
         cachePath: 'ycr-v2',
-        cacheMethod: 'write',
+        cacheMethod: 'refresh',
         workerBlobURL: false,
         gzip: true,
         logger: (m) => console.log('[YCR:Offscreen:Tesseract]', m.status, Math.round((m.progress || 0) * 100) + '%'),

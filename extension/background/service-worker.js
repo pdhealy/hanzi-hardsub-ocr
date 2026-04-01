@@ -35,11 +35,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           sendResponse({ ok: false, error: 'Missing imageDataUrl' });
           return;
         }
+        console.log('[YCR:SW] Ensuring offscreen document...');
         await ensureOffscreenDocument();
+        console.log('[YCR:SW] Sending OCR recognize message to offscreen...');
         const response = await chrome.runtime.sendMessage({
           action: 'OFFSCREEN_OCR_RECOGNIZE',
           imageDataUrl: message.imageDataUrl,
         });
+        console.log('[YCR:SW] Received response from offscreen:', response);
         sendResponse(response || { ok: false, error: 'No response from offscreen OCR' });
       } catch (err) {
         console.error('[YCR:SW] OCR error:', err);
