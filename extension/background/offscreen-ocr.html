@@ -5,7 +5,19 @@
   <title>YCR Offscreen OCR</title>
 </head>
 <body>
-  <script src="../libs/tesseract/tesseract.min.js"></script>
-  <script src="./offscreen-ocr.js"></script>
+  <script>
+    console.log('[YCR:Offscreen:HTML] Document loaded, about to load Tesseract...');
+    window.addEventListener('error', (e) => {
+      console.error('[YCR:Offscreen:HTML] Global error:', e.error, e.message, e.filename);
+    });
+  </script>
+  <script src="../libs/tesseract/tesseract.min.js" onerror="console.error('[YCR:Offscreen:HTML] Failed to load tesseract.min.js')"></script>
+  <script>
+    console.log('[YCR:Offscreen:HTML] Tesseract loaded, Tesseract object:', typeof Tesseract);
+  </script>
+  <script src="./offscreen-ocr.js" onerror="console.error('[YCR:Offscreen:HTML] Failed to load offscreen-ocr.js')"></script>
+  <script>
+    console.log('[YCR:Offscreen:HTML] All scripts loaded');
+  </script>
 </body>
 </html>
