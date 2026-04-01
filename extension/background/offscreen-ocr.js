@@ -1,5 +1,7 @@
 /* global Tesseract */
 
+console.log('[YCR:Offscreen] Script loaded and starting execution');
+
 const PARAM_NOT_FOUND_PREFIX = 'Warning: Parameter not found:';
 const originalConsoleWarn = console.warn.bind(console);
 console.warn = (...args) => {
@@ -137,6 +139,8 @@ async function ensureWorker() {
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log('[YCR:Offscreen] Received message:', message.action);
+  
   if (message.action !== 'OFFSCREEN_OCR_RECOGNIZE') return;
 
   (async () => {
@@ -145,8 +149,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ ok: false, error: 'Missing imageDataUrl' });
         return;
       }
+      console.log('[YCR:Offscreen] About to ensure worker...');
       const w = await ensureWorker();
+      console.log('[YCR:Offscreen] Worker ensured, preprocessing image...');
       const enhancedImageDataUrl = await preprocessForSubtitle(message.imageDataUrl);
+      console.log('[YCR:Offscreen] Image preprocessed, running OCR...');
       const options = {
         tessedit_pageseg_mode: '7',
         preserve_interword_spaces: '1',
@@ -155,6 +162,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       };
       const result = await w.recognize(enhancedImageDataUrl, options, { text: true });
       const cleanedText = cleanupSubtitleText(result.data.text, result.data.confidence);
+      console.log('[YCR:Offscreen] OCR complete, text:', cleanedText);
 
       sendResponse({
         ok: true,
