@@ -1,6 +1,11 @@
 /* global Tesseract */
 
-console.log('[YCR:Offscreen] Script loaded and starting execution');
+console.log('[YCR:Offscreen] Document loaded, checking Tesseract...');
+console.log('[YCR:Offscreen] Tesseract available:', typeof Tesseract !== 'undefined');
+
+if (typeof Tesseract === 'undefined') {
+  console.error('[YCR:Offscreen] CRITICAL: Tesseract not loaded!');
+}
 
 const PARAM_NOT_FOUND_PREFIX = 'Warning: Parameter not found:';
 const originalConsoleWarn = console.warn.bind(console);
