@@ -40,11 +40,12 @@ Plans:
 ## Phase 3: Settings and Customization
 
 - **Objective:** Allow users to personalize their viewing experience.
-- **Plans:** 2/2 plans complete
+- **Plans:** 3/3 plans complete
 
 Plans:
 - [x] 03-01-PLAN.md — Settings options page (font size, font color, bg opacity) with chrome.storage.sync persistence and live SidePanel wiring
 - [x] 03-02-PLAN.md — Gear icon in SidePanel header, public applySettings() method, chrome.storage.onChanged listener in content.js for real-time settings feedback loop
+- [x] 03-03-PLAN.md — Gap closure: add OPEN_SETTINGS message handler to service worker so gear icon opens options page
 
 **Requirements:**
 - REQ-SETTINGS-FONT: Font size and color controls in options page
