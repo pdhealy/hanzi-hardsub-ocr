@@ -4,3 +4,11 @@
 chrome.runtime.onInstalled.addListener(() => {
   console.log('[YCR] YouTube Chinese Reader installed');
 });
+
+// Handle messages from content scripts and side panel
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'OPEN_SETTINGS') {
+    chrome.tabs.create({ url: chrome.runtime.getURL('options/options.html') });
+    sendResponse({ ok: true });
+  }
+});

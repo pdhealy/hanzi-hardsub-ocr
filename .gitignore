@@ -2,3 +2,4 @@
 .gemini/
 .git/
 docs/
+node_modules/

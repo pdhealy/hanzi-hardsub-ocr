@@ -64,31 +64,41 @@ while read -r cidr; do
 done < <(echo "$gh_ranges" | jq -r '(.web + .api + .git)[]' | aggregate -q)
 
 # Resolve and add other allowed domains
+failed_domains=()
 for domain in \
     "registry.npmjs.org" \
+    "deb.debian.org" \
     "api.anthropic.com" \
     "sentry.io" \
     "statsig.anthropic.com" \
     "statsig.com" \
     "marketplace.visualstudio.com" \
     "vscode.blob.core.windows.net" \
-    "update.code.visualstudio.com"; do
+    "update.code.visualstudio.com" \
+    "cdn.playwright.dev" \
+    "playwright.download.prss.microsoft.com" \
+    "az764295.vo.msecnd.net"; do
     echo "Resolving $domain..."
     ips=$(dig +noall +answer A "$domain" | awk '$4 == "A" {print $5}')
     if [ -z "$ips" ]; then
-        echo "ERROR: Failed to resolve $domain"
-        exit 1
+        echo "WARNING: Failed to resolve $domain; continuing"
+        failed_domains+=("$domain")
+        continue
     fi
     
     while read -r ip; do
         if [[ ! "$ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
-            echo "ERROR: Invalid IP from DNS for $domain: $ip"
-            exit 1
+            echo "WARNING: Invalid IP from DNS for $domain: $ip"
+            continue
         fi
         echo "Adding $ip for $domain"
         ipset add -exist allowed-domains "$ip"
     done < <(echo "$ips")
 done
+
+if [ "${#failed_domains[@]}" -gt 0 ]; then
+    echo "WARNING: Some domains could not be resolved: ${failed_domains[*]}"
+fi
 
 # Get host IP from default route
 HOST_IP=$(ip route | grep default | cut -d" " -f3)

@@ -15,8 +15,8 @@
   ],
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
   "workspaceFolder": "/workspace",
-  "postCreateCommand": "if [ -f package.json ]; then rm -rf node_modules && npm install; else echo 'No package.json found in /workspace; skipping npm install'; fi",
-  "postStartCommand": "sudo /usr/local/bin/init-firewall.sh",
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "postStartCommand": "sudo /usr/local/bin/init-firewall.sh || echo 'Warning: firewall init failed; continuing container startup'",
   "waitFor": "postStartCommand",
   "remoteUser": "node",
   "mounts": [
