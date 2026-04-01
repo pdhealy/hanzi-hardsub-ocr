@@ -15,10 +15,8 @@ let isLooping = false;
 let isTicking = false;
 let lastRecognizedText = '';
 let scanCount = 0;
-const OCR_PREWARM_TIMEOUT_MS = 30000;  // Increased from 8s to 30s for slower devices/networks
-const OCR_INIT_TIMEOUT_MS = 45000;     // Increased from 15s to 45s for initial worker setup
+const OCR_INIT_TIMEOUT_MS = 60000;  // Generous timeout for first OCR call which initializes worker
 const OCR_SCAN_TIMEOUT_MS = 25000;
-let prewarmTriggered = false;
 
 // Settings defaults — must match keys used by extension/options/options.js
 const SETTINGS_DEFAULTS = { ycrFontSize: 14, ycrFontColor: '#111827', ycrBgOpacity: 1.0 };
@@ -58,30 +56,9 @@ function ensureOCR() {
   return ocrEngine;
 }
 
-function triggerBackgroundPrewarm() {
-  if (prewarmTriggered) return;
-  prewarmTriggered = true;
-
-  const engine = ensureOCR();
-  void prewarmWithTimeout(engine, OCR_PREWARM_TIMEOUT_MS).catch((err) => {
-    if (isContextInvalidatedError(err)) return;
-    console.error('[YCR] Background OCR prewarm failed:', err);
-  });
-}
-
 function isContextInvalidatedError(err) {
   const msg = err && err.message ? err.message : String(err || '');
   return msg.includes('Extension context invalidated');
-}
-
-function isOCRInitTimeoutError(err) {
-  const msg = err && err.message ? err.message : String(err || '');
-  return msg.includes('OCR initialization timed out');
-}
-
-function isOCRPrewarmTimeoutError(err) {
-  const msg = err && err.message ? err.message : String(err || '');
-  return msg.includes('OCR prewarm timed out');
 }
 
 function handleContextInvalidated() {
@@ -109,23 +86,6 @@ async function recognizeWithTimeout(engine, videoEl, intrinsicRect, timeoutMs) {
   }
 }
 
-async function prewarmWithTimeout(engine, timeoutMs) {
-  let timeoutId = null;
-  const timeoutPromise = new Promise((_, reject) => {
-    timeoutId = setTimeout(() => {
-      reject(new Error('OCR prewarm timed out'));
-    }, timeoutMs);
-  });
-
-  try {
-    await Promise.race([engine.prewarm(), timeoutPromise]);
-  } finally {
-    if (timeoutId !== null) {
-      clearTimeout(timeoutId);
-    }
-  }
-}
-
 function getVideoTimestamp(videoEl) {
   const t = Math.floor(videoEl.currentTime);
   const duration = videoEl.duration || 0;
@@ -144,24 +104,6 @@ function startLiveLoop() {
   ensureSidePanel().show();
   ensureSidePanel().showLoading();
   loadAndApplySettings();
-
-  const prewarmEngine = ensureOCR();
-  void prewarmWithTimeout(prewarmEngine, OCR_PREWARM_TIMEOUT_MS).catch((err) => {
-    if (isContextInvalidatedError(err)) {
-      handleContextInvalidated();
-      return;
-    }
-    if (isOCRPrewarmTimeoutError(err)) {
-      ensureSidePanel().showError('OCR engine initialization is taking longer than expected. Please wait a moment and try again, or reload the extension if the problem persists.');
-      stopLiveLoop();
-      ensureSidePanel().updateToggleButton(false);
-      return;
-    }
-    console.error('[YCR] OCR prewarm error:', err);
-    ensureSidePanel().showError(err.message || 'OCR prewarm failed');
-    stopLiveLoop();
-    ensureSidePanel().updateToggleButton(false);
-  });
 
   // Wire panel toggle button back to loop lifecycle (D-11)
   ensureSidePanel().setOnToggle(() => {
@@ -185,7 +127,7 @@ function startLiveLoop() {
     try {
       const engine = ensureOCR();
       if (scanCount === 0) {
-        ensureSidePanel().updateLoadingStatus('Initializing OCR engine… (this may take 20-30 seconds on first use)');
+        ensureSidePanel().updateLoadingStatus('Initializing OCR engine…');
       }
       const intrinsicRect = overlay.getVideoIntrinsicRect();
       const timeoutMs = scanCount === 0 ? OCR_INIT_TIMEOUT_MS : OCR_SCAN_TIMEOUT_MS;
@@ -205,12 +147,6 @@ function startLiveLoop() {
     } catch (err) {
       if (isContextInvalidatedError(err)) {
         handleContextInvalidated();
-        return;
-      }
-      if (isOCRInitTimeoutError(err)) {
-        ensureSidePanel().showError('OCR engine is still initializing. Please wait 10-20 seconds and try again. On first use, initialization may take up to 30 seconds.');
-        stopLiveLoop();
-        ensureSidePanel().updateToggleButton(false);
         return;
       }
       console.error('[YCR] Loop OCR error:', err);
@@ -314,11 +250,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           sendResponse({ ok: false, error: 'Extension updated. Refresh this tab and try again.' });
           return;
         }
-        if (isOCRInitTimeoutError(err)) {
-          panel.showError('OCR engine is still initializing. Please wait 10-20 seconds and try again. On first use, initialization may take up to 30 seconds.');
-          sendResponse({ ok: false, error: 'OCR initialization timed out' });
-          return;
-        }
         console.error('[YCR] OCR error:', err);
         panel.showError(err.message || 'Unknown error');
         sendResponse({ ok: false, error: err.message });
@@ -338,4 +269,3 @@ document.addEventListener('yt-navigate-finish', () => {
 });
 
 console.log('[YCR] YouTube Chinese Reader content script loaded');
-triggerBackgroundPrewarm();

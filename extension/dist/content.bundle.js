@@ -902,28 +902,7 @@
   // extension/content/ocr.js
   var OCREngine = class {
     constructor() {
-      this.initialized = false;
-      this.warmupPromise = null;
-    }
-    async prewarm() {
-      if (this.initialized) return;
-      if (this.warmupPromise) {
-        await this.warmupPromise;
-        return;
-      }
-      this.warmupPromise = (async () => {
-        try {
-          const response = await chrome.runtime.sendMessage({ action: "OCR_PREWARM" });
-          if (!response || !response.ok) {
-            throw new Error(response && response.error ? response.error : "OCR prewarm failed");
-          }
-          this.initialized = true;
-        } catch (err) {
-          this.warmupPromise = null;
-          throw err;
-        }
-      })();
-      await this.warmupPromise;
+      this.initialized = true;
     }
     /**
      * Captures a region of the video element and runs OCR on it.
@@ -932,9 +911,6 @@
      * @returns {Promise<{text: string, confidence: number}>}
      */
     async recognize(videoEl, intrinsicRect) {
-      if (!this.initialized) {
-        await this.prewarm();
-      }
       const canvas = document.createElement("canvas");
       canvas.width = intrinsicRect.width;
       canvas.height = intrinsicRect.height;
@@ -964,8 +940,7 @@
      * Terminates the tesseract.js worker and frees its resources.
      */
     async terminate() {
-      this.initialized = false;
-      this.warmupPromise = null;
+      this.initialized = true;
     }
     /**
      * Returns true if the worker has been initialized.
@@ -985,10 +960,8 @@
   var isTicking = false;
   var lastRecognizedText = "";
   var scanCount = 0;
-  var OCR_PREWARM_TIMEOUT_MS = 3e4;
-  var OCR_INIT_TIMEOUT_MS = 45e3;
+  var OCR_INIT_TIMEOUT_MS = 6e4;
   var OCR_SCAN_TIMEOUT_MS = 25e3;
-  var prewarmTriggered = false;
   var SETTINGS_DEFAULTS = { ycrFontSize: 14, ycrFontColor: "#111827", ycrBgOpacity: 1 };
   var SETTING_KEYS = ["ycrFontSize", "ycrFontColor", "ycrBgOpacity"];
   function loadAndApplySettings() {
@@ -1019,26 +992,9 @@
     if (!ocrEngine) ocrEngine = new OCREngine();
     return ocrEngine;
   }
-  function triggerBackgroundPrewarm() {
-    if (prewarmTriggered) return;
-    prewarmTriggered = true;
-    const engine = ensureOCR();
-    void prewarmWithTimeout(engine, OCR_PREWARM_TIMEOUT_MS).catch((err) => {
-      if (isContextInvalidatedError(err)) return;
-      console.error("[YCR] Background OCR prewarm failed:", err);
-    });
-  }
   function isContextInvalidatedError(err) {
     const msg = err && err.message ? err.message : String(err || "");
     return msg.includes("Extension context invalidated");
-  }
-  function isOCRInitTimeoutError(err) {
-    const msg = err && err.message ? err.message : String(err || "");
-    return msg.includes("OCR initialization timed out");
-  }
-  function isOCRPrewarmTimeoutError(err) {
-    const msg = err && err.message ? err.message : String(err || "");
-    return msg.includes("OCR prewarm timed out");
   }
   function handleContextInvalidated() {
     stopLiveLoop();
@@ -1062,21 +1018,6 @@
       }
     }
   }
-  async function prewarmWithTimeout(engine, timeoutMs) {
-    let timeoutId = null;
-    const timeoutPromise = new Promise((_, reject) => {
-      timeoutId = setTimeout(() => {
-        reject(new Error("OCR prewarm timed out"));
-      }, timeoutMs);
-    });
-    try {
-      await Promise.race([engine.prewarm(), timeoutPromise]);
-    } finally {
-      if (timeoutId !== null) {
-        clearTimeout(timeoutId);
-      }
-    }
-  }
   function getVideoTimestamp(videoEl) {
     const t = Math.floor(videoEl.currentTime);
     const duration = videoEl.duration || 0;
@@ -1093,23 +1034,6 @@
     ensureSidePanel().show();
     ensureSidePanel().showLoading();
     loadAndApplySettings();
-    const prewarmEngine = ensureOCR();
-    void prewarmWithTimeout(prewarmEngine, OCR_PREWARM_TIMEOUT_MS).catch((err) => {
-      if (isContextInvalidatedError(err)) {
-        handleContextInvalidated();
-        return;
-      }
-      if (isOCRPrewarmTimeoutError(err)) {
-        ensureSidePanel().showError("OCR engine initialization is taking longer than expected. Please wait a moment and try again, or reload the extension if the problem persists.");
-        stopLiveLoop();
-        ensureSidePanel().updateToggleButton(false);
-        return;
-      }
-      console.error("[YCR] OCR prewarm error:", err);
-      ensureSidePanel().showError(err.message || "OCR prewarm failed");
-      stopLiveLoop();
-      ensureSidePanel().updateToggleButton(false);
-    });
     ensureSidePanel().setOnToggle(() => {
       if (isLooping) {
         stopLiveLoop();
@@ -1129,7 +1053,7 @@
       try {
         const engine = ensureOCR();
         if (scanCount === 0) {
-          ensureSidePanel().updateLoadingStatus("Initializing OCR engine\u2026 (this may take 20-30 seconds on first use)");
+          ensureSidePanel().updateLoadingStatus("Initializing OCR engine\u2026");
         }
         const intrinsicRect = overlay.getVideoIntrinsicRect();
         const timeoutMs = scanCount === 0 ? OCR_INIT_TIMEOUT_MS : OCR_SCAN_TIMEOUT_MS;
@@ -1149,12 +1073,6 @@
       } catch (err) {
         if (isContextInvalidatedError(err)) {
           handleContextInvalidated();
-          return;
-        }
-        if (isOCRInitTimeoutError(err)) {
-          ensureSidePanel().showError("OCR engine is still initializing. Please wait 10-20 seconds and try again. On first use, initialization may take up to 30 seconds.");
-          stopLiveLoop();
-          ensureSidePanel().updateToggleButton(false);
           return;
         }
         console.error("[YCR] Loop OCR error:", err);
@@ -1243,11 +1161,6 @@
             sendResponse({ ok: false, error: "Extension updated. Refresh this tab and try again." });
             return;
           }
-          if (isOCRInitTimeoutError(err)) {
-            panel.showError("OCR engine is still initializing. Please wait 10-20 seconds and try again. On first use, initialization may take up to 30 seconds.");
-            sendResponse({ ok: false, error: "OCR initialization timed out" });
-            return;
-          }
           console.error("[YCR] OCR error:", err);
           panel.showError(err.message || "Unknown error");
           sendResponse({ ok: false, error: err.message });
@@ -1272,6 +1185,5 @@
     }
   });
   console.log("[YCR] YouTube Chinese Reader content script loaded");
-  triggerBackgroundPrewarm();
 })();
 //# sourceMappingURL=content.bundle.js.map

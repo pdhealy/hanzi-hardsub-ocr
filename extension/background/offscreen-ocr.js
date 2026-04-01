@@ -137,19 +137,6 @@ async function ensureWorker() {
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === 'OFFSCREEN_OCR_PREWARM') {
-    (async () => {
-      try {
-        await ensureWorker();
-        sendResponse({ ok: true });
-      } catch (err) {
-        console.error('[YCR:Offscreen] Prewarm error:', err);
-        sendResponse({ ok: false, error: err.message || String(err) });
-      }
-    })();
-    return true;
-  }
-
   if (message.action !== 'OFFSCREEN_OCR_RECOGNIZE') return;
 
   (async () => {

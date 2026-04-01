@@ -588,13 +588,13 @@ export class SidePanel {
   showError(message) {
     if (!this._content) return;
     if (this._listEl) return;
+    const detail = message ? escapeHtml(String(message)) : 'An error occurred while reading the image. Check the selection area and try again.';
     this._content.innerHTML = `
       <div class="ycr-state">
         <div class="ycr-state-heading" style="font-size: 13px; font-weight: 400; line-height: 1.4; color: #6B7280;">Recognition failed</div>
-        <div class="ycr-state-body" style="font-size: 13px; color: #6B7280; margin-top: 8px;">An error occurred while reading the image. Check the selection area and try again.</div>
+        <div class="ycr-state-body" style="font-size: 13px; color: #6B7280; margin-top: 8px;">${detail}</div>
       </div>
     `;
-    void message; // reserved for future use
   }
 
   destroy() {
