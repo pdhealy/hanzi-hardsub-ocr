@@ -16,22 +16,31 @@ export class OCREngine {
   async initialize() {
     if (this.worker) return;
 
-    const workerPath = chrome.runtime.getURL('libs/tesseract/worker.min.js');
     const corePath = chrome.runtime.getURL('libs/tesseract-core/');
     const langPath = chrome.runtime.getURL('tessdata/');
 
-    this.worker = await Tesseract.createWorker('chi_sim', 1, {
-      workerPath,
-      corePath,
-      langPath,
-      // workerBlobURL defaults to true: Tesseract fetches the worker script from
-      // the chrome-extension:// URL (content scripts can do this), then constructs
-      // a blob: Worker from the fetched content. Direct new Worker(chrome-extension://)
-      // is blocked by Chrome even for web_accessible_resources entries — only the
-      // blob: approach works from a web page origin context.
-      gzip: false,            // traineddata is pre-decompressed in extension bundle
-      logger: m => console.log('[YCR:Tesseract]', m.status, Math.round((m.progress || 0) * 100) + '%'),
-    });
+    // Content scripts can fetch chrome-extension:// URLs directly.
+    // We create the blob URL ourselves so the Worker constructor receives a blob:
+    // URL instead of a chrome-extension:// URL — Chrome blocks the latter even
+    // when the resource is listed in web_accessible_resources.
+    const workerUrl = chrome.runtime.getURL('libs/tesseract/worker.min.js');
+    const workerText = await fetch(workerUrl).then(r => r.text());
+    const workerBlobUrl = URL.createObjectURL(
+      new Blob([workerText], { type: 'application/javascript' })
+    );
+
+    try {
+      this.worker = await Tesseract.createWorker('chi_sim', 1, {
+        workerPath: workerBlobUrl,
+        corePath,
+        langPath,
+        workerBlobURL: false, // we already supply a blob URL — skip Tesseract's own fetch
+        gzip: false,          // traineddata is pre-decompressed in extension bundle
+        logger: m => console.log('[YCR:Tesseract]', m.status, Math.round((m.progress || 0) * 100) + '%'),
+      });
+    } finally {
+      URL.revokeObjectURL(workerBlobUrl);
+    }
 
     this.initialized = true;
   }

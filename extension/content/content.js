@@ -69,6 +69,7 @@ function startLiveLoop() {
   isLooping = true;
 
   ensureSidePanel().show();
+  ensureSidePanel().showLoading();
   loadAndApplySettings();
 
   // Wire panel toggle button back to loop lifecycle (D-11)
