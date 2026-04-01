@@ -15,7 +15,8 @@ let isLooping = false;
 let isTicking = false;
 let lastRecognizedText = '';
 let scanCount = 0;
-const OCR_TIMEOUT_MS = 15000;
+const OCR_INIT_TIMEOUT_MS = 60000;
+const OCR_SCAN_TIMEOUT_MS = 25000;
 
 // Settings defaults — must match keys used by extension/options/options.js
 const SETTINGS_DEFAULTS = { ycrFontSize: 14, ycrFontColor: '#111827', ycrBgOpacity: 1.0 };
@@ -55,12 +56,25 @@ function ensureOCR() {
   return ocrEngine;
 }
 
-async function recognizeWithTimeout(engine, videoEl, intrinsicRect) {
+function isContextInvalidatedError(err) {
+  const msg = err && err.message ? err.message : String(err || '');
+  return msg.includes('Extension context invalidated');
+}
+
+function handleContextInvalidated() {
+  stopLiveLoop();
+  if (sidePanel) {
+    sidePanel.showError('Extension updated. Please refresh this YouTube tab and start recognition again.');
+    sidePanel.updateToggleButton(false);
+  }
+}
+
+async function recognizeWithTimeout(engine, videoEl, intrinsicRect, timeoutMs) {
   let timeoutId = null;
   const timeoutPromise = new Promise((_, reject) => {
     timeoutId = setTimeout(() => {
       reject(new Error('OCR initialization timed out'));
-    }, OCR_TIMEOUT_MS);
+    }, timeoutMs);
   });
 
   try {
@@ -116,7 +130,8 @@ function startLiveLoop() {
         ensureSidePanel().updateLoadingStatus('Initializing OCR engine…');
       }
       const intrinsicRect = overlay.getVideoIntrinsicRect();
-      const result = await recognizeWithTimeout(engine, videoEl, intrinsicRect);
+      const timeoutMs = scanCount === 0 ? OCR_INIT_TIMEOUT_MS : OCR_SCAN_TIMEOUT_MS;
+      const result = await recognizeWithTimeout(engine, videoEl, intrinsicRect, timeoutMs);
       const text = result.text;
       scanCount++;
       console.log('[YCR] scan', scanCount, 'intrinsicRect:', intrinsicRect, 'text:', JSON.stringify(text));
@@ -130,6 +145,10 @@ function startLiveLoop() {
         );
       }
     } catch (err) {
+      if (isContextInvalidatedError(err)) {
+        handleContextInvalidated();
+        return;
+      }
       console.error('[YCR] Loop OCR error:', err);
       try {
         const videoEl2 = document.querySelector('#movie_player video');
@@ -215,7 +234,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
 
         const intrinsicRect = overlay.getVideoIntrinsicRect();
-        const result = await recognizeWithTimeout(engine, videoEl, intrinsicRect);
+        const result = await recognizeWithTimeout(engine, videoEl, intrinsicRect, OCR_INIT_TIMEOUT_MS);
 
         if (result.text && result.text.length > 0) {
           panel.showText(result.text);
@@ -226,6 +245,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           sendResponse({ ok: true, text: '' });
         }
       } catch (err) {
+        if (isContextInvalidatedError(err)) {
+          handleContextInvalidated();
+          sendResponse({ ok: false, error: 'Extension updated. Refresh this tab and try again.' });
+          return;
+        }
         console.error('[YCR] OCR error:', err);
         panel.showError(err.message || 'Unknown error');
         sendResponse({ ok: false, error: err.message });

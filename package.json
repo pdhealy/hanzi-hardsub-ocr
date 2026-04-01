@@ -11,6 +11,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@tesseract.js-data/chi_sim": "^1.0.0",
+    "@tesseract.js-data/chi_tra": "^1.0.0",
     "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
