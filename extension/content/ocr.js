@@ -24,7 +24,11 @@ export class OCREngine {
       workerPath,
       corePath,
       langPath,
-      workerBlobURL: false,   // CRITICAL for MV3 CSP compliance — disables blob: worker URL
+      // workerBlobURL defaults to true: Tesseract fetches the worker script from
+      // the chrome-extension:// URL (content scripts can do this), then constructs
+      // a blob: Worker from the fetched content. Direct new Worker(chrome-extension://)
+      // is blocked by Chrome even for web_accessible_resources entries — only the
+      // blob: approach works from a web page origin context.
       gzip: false,            // traineddata is pre-decompressed in extension bundle
       logger: m => console.log('[YCR:Tesseract]', m.status, Math.round((m.progress || 0) * 100) + '%'),
     });
