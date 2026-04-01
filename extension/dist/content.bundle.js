@@ -826,6 +826,11 @@
       </div>
     `;
     }
+    updateLoadingStatus(msg) {
+      if (!this._content || this._listEl) return;
+      const body = this._content.querySelector(".ycr-state-body");
+      if (body) body.textContent = msg;
+    }
     showText(text) {
       if (!this._content) return;
       if (this._listEl) return;
@@ -989,6 +994,7 @@
   var isLooping = false;
   var isTicking = false;
   var lastRecognizedText = "";
+  var scanCount = 0;
   var SETTINGS_DEFAULTS = { ycrFontSize: 14, ycrFontColor: "#111827", ycrBgOpacity: 1 };
   var SETTING_KEYS = ["ycrFontSize", "ycrFontColor", "ycrBgOpacity"];
   function loadAndApplySettings() {
@@ -1053,13 +1059,22 @@
       isTicking = true;
       try {
         const engine = ensureOCR();
+        if (!engine.isInitialized()) {
+          ensureSidePanel().updateLoadingStatus("Initializing OCR engine\u2026");
+        }
         const intrinsicRect = overlay.getVideoIntrinsicRect();
         const result = await engine.recognize(videoEl, intrinsicRect);
         const text = result.text;
+        scanCount++;
+        console.log("[YCR] scan", scanCount, "intrinsicRect:", intrinsicRect, "text:", JSON.stringify(text));
         if (text && text !== lastRecognizedText) {
           lastRecognizedText = text;
           const ts = getVideoTimestamp(videoEl);
           ensureSidePanel().appendEntry(ts, text);
+        } else {
+          ensureSidePanel().updateLoadingStatus(
+            `Scanning\u2026 (${scanCount} frame${scanCount === 1 ? "" : "s"} checked, no text found)`
+          );
         }
       } catch (err) {
         console.error("[YCR] Loop OCR error:", err);
@@ -1083,6 +1098,7 @@
     isLooping = false;
     isTicking = false;
     lastRecognizedText = "";
+    scanCount = 0;
   }
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === "ACTIVATE_DRAW_MODE") {

@@ -551,6 +551,12 @@ export class SidePanel {
     `;
   }
 
+  updateLoadingStatus(msg) {
+    if (!this._content || this._listEl) return;
+    const body = this._content.querySelector('.ycr-state-body');
+    if (body) body.textContent = msg;
+  }
+
   showText(text) {
     if (!this._content) return;
     if (this._listEl) return;

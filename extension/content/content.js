@@ -14,6 +14,7 @@ let loopIntervalId = null;
 let isLooping = false;
 let isTicking = false;
 let lastRecognizedText = '';
+let scanCount = 0;
 
 // Settings defaults — must match keys used by extension/options/options.js
 const SETTINGS_DEFAULTS = { ycrFontSize: 14, ycrFontColor: '#111827', ycrBgOpacity: 1.0 };
@@ -93,13 +94,22 @@ function startLiveLoop() {
     isTicking = true;
     try {
       const engine = ensureOCR();
+      if (!engine.isInitialized()) {
+        ensureSidePanel().updateLoadingStatus('Initializing OCR engine…');
+      }
       const intrinsicRect = overlay.getVideoIntrinsicRect();
       const result = await engine.recognize(videoEl, intrinsicRect);
       const text = result.text;
+      scanCount++;
+      console.log('[YCR] scan', scanCount, 'intrinsicRect:', intrinsicRect, 'text:', JSON.stringify(text));
       if (text && text !== lastRecognizedText) { // D-05: dedup
         lastRecognizedText = text;
         const ts = getVideoTimestamp(videoEl);
         ensureSidePanel().appendEntry(ts, text); // D-04
+      } else {
+        ensureSidePanel().updateLoadingStatus(
+          `Scanning… (${scanCount} frame${scanCount === 1 ? '' : 's'} checked, no text found)`
+        );
       }
     } catch (err) {
       console.error('[YCR] Loop OCR error:', err);
@@ -123,6 +133,7 @@ function stopLiveLoop() {
   isLooping = false;
   isTicking = false;
   lastRecognizedText = '';
+  scanCount = 0;
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
