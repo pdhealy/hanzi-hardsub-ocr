@@ -50,7 +50,7 @@ async function renderSubtitleVariant(imageDataUrl, variant) {
   sourceImg.src = imageDataUrl;
   await sourceImg.decode();
 
-  const scale = 2;
+  const scale = variant === 'contrast' ? 2 : 1.6;
   const canvas = document.createElement('canvas');
   canvas.width = sourceImg.width * scale;
   canvas.height = sourceImg.height * scale;
@@ -119,7 +119,7 @@ async function recognizeSubtitle(w, imageDataUrl) {
   const contrastImage = await renderSubtitleVariant(imageDataUrl, 'contrast');
   let best = await runRecognition(w, contrastImage);
 
-  if (!best.text || best.score < 72) {
+  if (!best.text || best.score < 68) {
     const binaryImage = await renderSubtitleVariant(imageDataUrl, 'binary');
     const fallback = await runRecognition(w, binaryImage);
     if (fallback.score > best.score) {

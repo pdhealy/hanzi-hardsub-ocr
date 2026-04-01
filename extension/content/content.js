@@ -15,7 +15,7 @@ let isLooping = false;
 let isTicking = false;
 let lastRecognizedText = '';
 let scanCount = 0;
-const OCR_INIT_TIMEOUT_MS = 60000;
+const OCR_INIT_TIMEOUT_MS = 90000;
 const OCR_SCAN_TIMEOUT_MS = 25000;
 
 // Settings defaults — must match keys used by extension/options/options.js
@@ -147,6 +147,10 @@ function startLiveLoop() {
     } catch (err) {
       if (isContextInvalidatedError(err)) {
         handleContextInvalidated();
+        return;
+      }
+      if (err && err.message === 'OCR initialization timed out') {
+        ensureSidePanel().updateLoadingStatus('OCR is still initializing… this can take longer on first run.');
         return;
       }
       console.error('[YCR] Loop OCR error:', err);
