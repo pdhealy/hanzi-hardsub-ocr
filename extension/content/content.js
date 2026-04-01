@@ -15,6 +15,7 @@ let isLooping = false;
 let isTicking = false;
 let lastRecognizedText = '';
 let scanCount = 0;
+const OCR_TIMEOUT_MS = 15000;
 
 // Settings defaults — must match keys used by extension/options/options.js
 const SETTINGS_DEFAULTS = { ycrFontSize: 14, ycrFontColor: '#111827', ycrBgOpacity: 1.0 };
@@ -52,6 +53,23 @@ function ensureSidePanel() {
 function ensureOCR() {
   if (!ocrEngine) ocrEngine = new OCREngine();
   return ocrEngine;
+}
+
+async function recognizeWithTimeout(engine, videoEl, intrinsicRect) {
+  let timeoutId = null;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error('OCR initialization timed out'));
+    }, OCR_TIMEOUT_MS);
+  });
+
+  try {
+    return await Promise.race([engine.recognize(videoEl, intrinsicRect), timeoutPromise]);
+  } finally {
+    if (timeoutId !== null) {
+      clearTimeout(timeoutId);
+    }
+  }
 }
 
 function getVideoTimestamp(videoEl) {
@@ -94,11 +112,11 @@ function startLiveLoop() {
     isTicking = true;
     try {
       const engine = ensureOCR();
-      if (!engine.isInitialized()) {
+      if (scanCount === 0) {
         ensureSidePanel().updateLoadingStatus('Initializing OCR engine…');
       }
       const intrinsicRect = overlay.getVideoIntrinsicRect();
-      const result = await engine.recognize(videoEl, intrinsicRect);
+      const result = await recognizeWithTimeout(engine, videoEl, intrinsicRect);
       const text = result.text;
       scanCount++;
       console.log('[YCR] scan', scanCount, 'intrinsicRect:', intrinsicRect, 'text:', JSON.stringify(text));
@@ -197,7 +215,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
 
         const intrinsicRect = overlay.getVideoIntrinsicRect();
-        const result = await engine.recognize(videoEl, intrinsicRect);
+        const result = await recognizeWithTimeout(engine, videoEl, intrinsicRect);
 
         if (result.text && result.text.length > 0) {
           panel.showText(result.text);

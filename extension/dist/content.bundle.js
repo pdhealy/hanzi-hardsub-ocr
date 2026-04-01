@@ -902,37 +902,6 @@
   // extension/content/ocr.js
   var OCREngine = class {
     constructor() {
-      this.worker = null;
-      this.initialized = false;
-    }
-    /**
-     * Initializes the tesseract.js worker with locally bundled files.
-     * Uses chrome.runtime.getURL to construct extension-internal resource paths.
-     * Must be called before recognize(), though recognize() will auto-call it.
-     */
-    async initialize() {
-      if (this.worker) return;
-      const corePath = chrome.runtime.getURL("libs/tesseract-core/");
-      const langPath = chrome.runtime.getURL("tessdata/");
-      const workerUrl = chrome.runtime.getURL("libs/tesseract/worker.min.js");
-      const workerText = await fetch(workerUrl).then((r) => r.text());
-      const workerBlobUrl = URL.createObjectURL(
-        new Blob([workerText], { type: "application/javascript" })
-      );
-      try {
-        this.worker = await Tesseract.createWorker("chi_sim", 1, {
-          workerPath: workerBlobUrl,
-          corePath,
-          langPath,
-          workerBlobURL: false,
-          // we already supply a blob URL — skip Tesseract's own fetch
-          gzip: false,
-          // traineddata is pre-decompressed in extension bundle
-          logger: (m) => console.log("[YCR:Tesseract]", m.status, Math.round((m.progress || 0) * 100) + "%")
-        });
-      } finally {
-        URL.revokeObjectURL(workerBlobUrl);
-      }
       this.initialized = true;
     }
     /**
@@ -942,9 +911,6 @@
      * @returns {Promise<{text: string, confidence: number}>}
      */
     async recognize(videoEl, intrinsicRect) {
-      if (!this.worker) {
-        await this.initialize();
-      }
       const canvas = document.createElement("canvas");
       canvas.width = intrinsicRect.width;
       canvas.height = intrinsicRect.height;
@@ -961,21 +927,20 @@
         intrinsicRect.height
       );
       const dataURL = canvas.toDataURL("image/png");
-      const result = await this.worker.recognize(dataURL, {}, { text: true });
-      return {
-        text: (result.data.text || "").trim(),
-        confidence: result.data.confidence || 0
-      };
+      const response = await chrome.runtime.sendMessage({
+        action: "OCR_RECOGNIZE_IMAGE",
+        imageDataUrl: dataURL
+      });
+      if (!response || !response.ok) {
+        throw new Error(response && response.error ? response.error : "Background OCR failed");
+      }
+      return { text: response.text || "", confidence: response.confidence || 0 };
     }
     /**
      * Terminates the tesseract.js worker and frees its resources.
      */
     async terminate() {
-      if (this.worker) {
-        await this.worker.terminate();
-        this.worker = null;
-        this.initialized = false;
-      }
+      this.initialized = true;
     }
     /**
      * Returns true if the worker has been initialized.
@@ -995,6 +960,7 @@
   var isTicking = false;
   var lastRecognizedText = "";
   var scanCount = 0;
+  var OCR_TIMEOUT_MS = 15e3;
   var SETTINGS_DEFAULTS = { ycrFontSize: 14, ycrFontColor: "#111827", ycrBgOpacity: 1 };
   var SETTING_KEYS = ["ycrFontSize", "ycrFontColor", "ycrBgOpacity"];
   function loadAndApplySettings() {
@@ -1024,6 +990,21 @@
   function ensureOCR() {
     if (!ocrEngine) ocrEngine = new OCREngine();
     return ocrEngine;
+  }
+  async function recognizeWithTimeout(engine, videoEl, intrinsicRect) {
+    let timeoutId = null;
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => {
+        reject(new Error("OCR initialization timed out"));
+      }, OCR_TIMEOUT_MS);
+    });
+    try {
+      return await Promise.race([engine.recognize(videoEl, intrinsicRect), timeoutPromise]);
+    } finally {
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
+    }
   }
   function getVideoTimestamp(videoEl) {
     const t = Math.floor(videoEl.currentTime);
@@ -1059,11 +1040,11 @@
       isTicking = true;
       try {
         const engine = ensureOCR();
-        if (!engine.isInitialized()) {
+        if (scanCount === 0) {
           ensureSidePanel().updateLoadingStatus("Initializing OCR engine\u2026");
         }
         const intrinsicRect = overlay.getVideoIntrinsicRect();
-        const result = await engine.recognize(videoEl, intrinsicRect);
+        const result = await recognizeWithTimeout(engine, videoEl, intrinsicRect);
         const text = result.text;
         scanCount++;
         console.log("[YCR] scan", scanCount, "intrinsicRect:", intrinsicRect, "text:", JSON.stringify(text));
@@ -1149,7 +1130,7 @@
             return;
           }
           const intrinsicRect = overlay.getVideoIntrinsicRect();
-          const result = await engine.recognize(videoEl, intrinsicRect);
+          const result = await recognizeWithTimeout(engine, videoEl, intrinsicRect);
           if (result.text && result.text.length > 0) {
             panel.showText(result.text);
             sendResponse({ ok: true, text: result.text });
