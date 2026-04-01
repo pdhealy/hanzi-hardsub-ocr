@@ -95,35 +95,61 @@ async function preprocessForSubtitle(imageDataUrl) {
 
 async function ensureWorker() {
   if (worker) return worker;
-  if (workerInitPromise) return workerInitPromise;
+  if (workerInitPromise) {
+    // Wait for existing initialization to complete
+    return workerInitPromise;
+  }
 
   workerInitPromise = (async () => {
-    selectedLang = await pickBestLanguage();
-    const corePath = chrome.runtime.getURL('libs/tesseract-core/');
-    const langPath = chrome.runtime.getURL('tessdata/');
-    const workerPath = chrome.runtime.getURL('libs/tesseract/worker.min.js');
+    try {
+      selectedLang = await pickBestLanguage();
+      const corePath = chrome.runtime.getURL('libs/tesseract-core/');
+      const langPath = chrome.runtime.getURL('tessdata/');
+      const workerPath = chrome.runtime.getURL('libs/tesseract/worker.min.js');
 
-    worker = await Tesseract.createWorker(selectedLang, 1, {
-      workerPath,
-      corePath,
-      langPath,
-      cachePath: 'ycr-v2',
-      cacheMethod: 'refresh',
-      workerBlobURL: false,
-      gzip: true,
-      logger: (m) => console.log('[YCR:Offscreen:Tesseract]', m.status, Math.round((m.progress || 0) * 100) + '%'),
-    });
-    return worker;
+      console.log('[YCR:Offscreen] Starting Tesseract worker initialization...');
+      const startTime = Date.now();
+
+      worker = await Tesseract.createWorker(selectedLang, 1, {
+        workerPath,
+        corePath,
+        langPath,
+        cachePath: 'ycr-v2',
+        cacheMethod: 'write',
+        workerBlobURL: false,
+        gzip: true,
+        logger: (m) => console.log('[YCR:Offscreen:Tesseract]', m.status, Math.round((m.progress || 0) * 100) + '%'),
+      });
+
+      const elapsed = Date.now() - startTime;
+      console.log(`[YCR:Offscreen] Tesseract worker initialized successfully in ${elapsed}ms`);
+      return worker;
+    } catch (err) {
+      console.error('[YCR:Offscreen] Worker initialization failed:', err);
+      // Clear promise on error so it can be retried
+      workerInitPromise = null;
+      worker = null;
+      throw err;
+    }
   })();
 
-  try {
-    return await workerInitPromise;
-  } finally {
-    workerInitPromise = null;
-  }
+  return workerInitPromise;
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'OFFSCREEN_OCR_PREWARM') {
+    (async () => {
+      try {
+        await ensureWorker();
+        sendResponse({ ok: true });
+      } catch (err) {
+        console.error('[YCR:Offscreen] Prewarm error:', err);
+        sendResponse({ ok: false, error: err.message || String(err) });
+      }
+    })();
+    return true;
+  }
+
   if (message.action !== 'OFFSCREEN_OCR_RECOGNIZE') return;
 
   (async () => {

@@ -3,7 +3,33 @@
 
 export class OCREngine {
   constructor() {
-    this.initialized = true;
+    this.initialized = false;
+    this.warmupPromise = null;
+  }
+
+  async prewarm() {
+    if (this.initialized) return;
+    if (this.warmupPromise) {
+      // Wait for existing warmup to complete
+      await this.warmupPromise;
+      return;
+    }
+
+    this.warmupPromise = (async () => {
+      try {
+        const response = await chrome.runtime.sendMessage({ action: 'OCR_PREWARM' });
+        if (!response || !response.ok) {
+          throw new Error(response && response.error ? response.error : 'OCR prewarm failed');
+        }
+        this.initialized = true;
+      } catch (err) {
+        // Clear warmup promise on error so it can be retried
+        this.warmupPromise = null;
+        throw err;
+      }
+    })();
+
+    await this.warmupPromise;
   }
 
   /**
@@ -13,6 +39,10 @@ export class OCREngine {
    * @returns {Promise<{text: string, confidence: number}>}
    */
   async recognize(videoEl, intrinsicRect) {
+    if (!this.initialized) {
+      await this.prewarm();
+    }
+
     // Create an offscreen canvas sized to the selected region
     const canvas = document.createElement('canvas');
     canvas.width = intrinsicRect.width;
@@ -47,7 +77,8 @@ export class OCREngine {
    * Terminates the tesseract.js worker and frees its resources.
    */
   async terminate() {
-    this.initialized = true;
+    this.initialized = false;
+    this.warmupPromise = null;
   }
 
   /**
