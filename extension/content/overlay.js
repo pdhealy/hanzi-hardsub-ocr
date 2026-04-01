@@ -50,23 +50,34 @@ export class SelectionOverlay {
   }
 
   _createContainer() {
-    // Attach overlay container to the movie_player element (or its parent)
-    const player = document.querySelector('#movie_player') || this._videoEl.parentElement;
-
     const container = document.createElement('div');
     container.id = 'ycr-overlay-container';
-    container.style.cssText = [
-      'position: absolute',
-      'top: 0',
-      'left: 0',
-      'width: 100%',
-      'height: 100%',
-      'z-index: 2147483646',
-      'pointer-events: none',
-    ].join('; ');
-
-    player.appendChild(container);
+    document.body.appendChild(container);
     this._container = container;
+
+    // Position the container over the video element using fixed coordinates.
+    // This avoids dependence on #movie_player's positioning context and ensures
+    // the drawable area is always constrained to the video element itself.
+    const updatePosition = () => {
+      const rect = this._videoEl.getBoundingClientRect();
+      container.style.cssText = [
+        'position: fixed',
+        `top: ${rect.top}px`,
+        `left: ${rect.left}px`,
+        `width: ${rect.width}px`,
+        `height: ${rect.height}px`,
+        'z-index: 2147483646',
+        'pointer-events: none',
+      ].join('; ');
+    };
+
+    updatePosition();
+
+    // Keep aligned when the video or window resizes
+    this._resizeObserver = new ResizeObserver(updatePosition);
+    this._resizeObserver.observe(this._videoEl);
+    this._onWindowResize = updatePosition;
+    window.addEventListener('resize', this._onWindowResize);
 
     // Create the selection box element (hidden until first draw)
     this._createBox();
@@ -384,6 +395,16 @@ export class SelectionOverlay {
 
     // Remove navigation listener
     document.removeEventListener('yt-navigate-finish', this._navHandler);
+
+    // Stop resize tracking
+    if (this._resizeObserver) {
+      this._resizeObserver.disconnect();
+      this._resizeObserver = null;
+    }
+    if (this._onWindowResize) {
+      window.removeEventListener('resize', this._onWindowResize);
+      this._onWindowResize = null;
+    }
 
     // Remove overlay container from DOM
     if (this._container && this._container.parentElement) {

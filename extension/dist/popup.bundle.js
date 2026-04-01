@@ -55,6 +55,7 @@
     if (response?.isLooping) {
       btnRecognize.textContent = "Stop Recognition";
       btnRecognize.dataset.looping = "true";
+      btnRecognize.disabled = false;
       setStatus("processing");
     }
   })();

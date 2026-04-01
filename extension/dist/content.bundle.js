@@ -37,20 +37,27 @@
       }
     }
     _createContainer() {
-      const player = document.querySelector("#movie_player") || this._videoEl.parentElement;
       const container = document.createElement("div");
       container.id = "ycr-overlay-container";
-      container.style.cssText = [
-        "position: absolute",
-        "top: 0",
-        "left: 0",
-        "width: 100%",
-        "height: 100%",
-        "z-index: 2147483646",
-        "pointer-events: none"
-      ].join("; ");
-      player.appendChild(container);
+      document.body.appendChild(container);
       this._container = container;
+      const updatePosition = () => {
+        const rect = this._videoEl.getBoundingClientRect();
+        container.style.cssText = [
+          "position: fixed",
+          `top: ${rect.top}px`,
+          `left: ${rect.left}px`,
+          `width: ${rect.width}px`,
+          `height: ${rect.height}px`,
+          "z-index: 2147483646",
+          "pointer-events: none"
+        ].join("; ");
+      };
+      updatePosition();
+      this._resizeObserver = new ResizeObserver(updatePosition);
+      this._resizeObserver.observe(this._videoEl);
+      this._onWindowResize = updatePosition;
+      window.addEventListener("resize", this._onWindowResize);
       this._createBox();
     }
     _createBox() {
@@ -307,6 +314,14 @@
         this._currentDrawHandler = null;
       }
       document.removeEventListener("yt-navigate-finish", this._navHandler);
+      if (this._resizeObserver) {
+        this._resizeObserver.disconnect();
+        this._resizeObserver = null;
+      }
+      if (this._onWindowResize) {
+        window.removeEventListener("resize", this._onWindowResize);
+        this._onWindowResize = null;
+      }
       if (this._container && this._container.parentElement) {
         this._container.parentElement.removeChild(this._container);
       }
@@ -497,15 +512,15 @@
 #ycr-collapse-tab {
   position: fixed;
   right: 0;
-  top: 50%;
+  top: 25%;
   transform: translateY(-50%);
-  width: 24px;
-  height: 80px;
+  width: 40px;
+  height: 120px;
   background: #2563EB;
   color: #FFFFFF;
   writing-mode: vertical-rl;
   text-orientation: mixed;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.05em;
   display: none;

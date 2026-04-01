@@ -178,15 +178,15 @@ const PANEL_STYLES = `
 #ycr-collapse-tab {
   position: fixed;
   right: 0;
-  top: 50%;
+  top: 25%;
   transform: translateY(-50%);
-  width: 24px;
-  height: 80px;
+  width: 40px;
+  height: 120px;
   background: #2563EB;
   color: #FFFFFF;
   writing-mode: vertical-rl;
   text-orientation: mixed;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.05em;
   display: none;
