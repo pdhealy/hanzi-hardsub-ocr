@@ -3,3 +3,4 @@
 .git/
 docs/
 node_modules/
+assets/*

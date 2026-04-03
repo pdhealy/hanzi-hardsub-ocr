@@ -33,15 +33,12 @@ async function build() {
     globalName: undefined,
   });
 
-  // Offscreen OCR bundle — PaddleOCR engine
-  // @techstark/opencv-js is external: loaded as <script> in offscreen-ocr.html
-  // so the 12MB opencv.js is NOT inlined in the bundle
+  // Offscreen OCR bundle — direct ONNX Runtime Web pipeline
   const offscreenBuild = esbuild.context({
     ...sharedConfig,
     entryPoints: ['extension/background/offscreen-ocr.js'],
     outfile: 'extension/background/offscreen-ocr.bundle.js',
     platform: 'browser',
-    external: ['@techstark/opencv-js'],
   });
 
   const [contentCtx, popupCtx, offscreenCtx] = await Promise.all([
@@ -60,10 +57,6 @@ async function build() {
     await Promise.all([contentCtx.dispose(), popupCtx.dispose(), offscreenCtx.dispose()]);
 
     // Copy binary assets that cannot be bundled
-    copyFile(
-      'node_modules/@techstark/opencv-js/dist/opencv.js',
-      'extension/libs/opencv/opencv.js'
-    );
     // onnxruntime-web >=1.24 ships only threaded WASM variants
     copyFile(
       'node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.wasm',
@@ -72,6 +65,14 @@ async function build() {
     copyFile(
       'node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.mjs',
       'extension/libs/ort/ort-wasm-simd-threaded.mjs'
+    );
+    copyFile(
+      'node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.mjs',
+      'extension/libs/ort/ort-wasm-simd-threaded.jsep.mjs'
+    );
+    copyFile(
+      'node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.wasm',
+      'extension/libs/ort/ort-wasm-simd-threaded.jsep.wasm'
     );
 
     console.log('Build complete.');

@@ -30,7 +30,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["libs/ort/*", "libs/opencv/*"],
+      "resources": ["libs/ort/*"],
       "matches": ["<all_urls>"]
     }
   ]

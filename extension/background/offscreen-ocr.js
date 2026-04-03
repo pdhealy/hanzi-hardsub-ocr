@@ -1,65 +1,37 @@
 /**
- * Offscreen OCR worker — PaddleOCR implementation.
+ * Offscreen OCR worker — direct ONNX Runtime Web pipeline.
  *
  * Architecture:
- *   - opencv.js loaded as <script> in offscreen-ocr.html (12MB, sets globalThis.cv)
- *   - This bundle: ppu-paddle-ocr/web + opencc-js + onnxruntime-web JS
- *   - ONNX Runtime WASM files: served from extension/libs/ort/ (set via ort.env.wasm.wasmPaths)
- *   - PaddleOCR models: downloaded from unpkg.com on first install, cached in Cache Storage
+ *   - No opencv dependency (avoids new Function() / unsafe-eval)
+ *   - Loads ch_PP-OCRv4_rec_infer.onnx + ppocr_keys_v1.txt
+ *   - Preprocesses with Canvas API (resize h=48, normalize to [-1,1])
+ *   - Runs ONNX inference via onnxruntime-web (wasm provider)
+ *   - CTC greedy decode → OpenCC simplified→traditional
  *
- * Matches poc_2/ocr_subtitles.js PaddleOCR behavior:
- *   - Runs on original image (no preprocessing)
- *   - lines.map(l => l.text).join('')
- *   - toTraditional() via opencc-js Converter({ from: 'cn', to: 'twp' })
+ * Models cached in Cache Storage after first download.
  */
 
-import { PaddleOcrService } from 'ppu-paddle-ocr/web';
 import { Converter } from 'opencc-js';
 import * as ort from 'onnxruntime-web';
 
 // Point ONNX Runtime WASM loader to locally bundled files
-// Avoids CSP issues (script-src 'self') and ensures offline access
 ort.env.wasm.wasmPaths = chrome.runtime.getURL('libs/ort/');
 
 // OpenCC: Simplified Chinese → Traditional Chinese (Taiwan Phrases)
-// Matches poc_2: opencc.Converter({ from: 'cn', to: 'twp' })
 const toTraditional = Converter({ from: 'cn', to: 'twp' });
 
-// Chinese PP-OCRv4 models — same models used by @gutenye/ocr-node in poc_2
-// Cached in Cache Storage after first download (one-time on extension init)
 const CACHE_NAME = 'ycr-paddle-models-v1';
 const MODEL_URLS = {
-  detection: 'https://unpkg.com/@gutenye/ocr-models@1.4.2/assets/ch_PP-OCRv4_det_infer.onnx',
   recognition: 'https://unpkg.com/@gutenye/ocr-models@1.4.2/assets/ch_PP-OCRv4_rec_infer.onnx',
   dictionary: 'https://unpkg.com/@gutenye/ocr-models@1.4.2/assets/ppocr_keys_v1.txt',
 };
 
-let paddleOcr = null;
+let recSession = null;
+let dictionary = null;
 let initPromise = null;
 
 /**
- * Wait for opencv.js WASM runtime to be fully initialized.
- * opencv.js is loaded as a <script> tag and initializes asynchronously.
- * ppu-ocv/web's initRuntime() checks globalThis.cv?.Mat before any dynamic imports.
- */
-function waitForOpenCV() {
-  return new Promise((resolve) => {
-    /* global cv */
-    if (typeof cv !== 'undefined' && cv.Mat) { resolve(); return; }
-    const check = setInterval(() => {
-      if (typeof cv !== 'undefined') {
-        clearInterval(check);
-        if (cv.Mat) resolve();
-        else cv.onRuntimeInitialized = resolve;
-      }
-    }, 50);
-  });
-}
-
-/**
  * Fetch model from URL, cache in Cache Storage, return ArrayBuffer.
- * Cache Storage persists across extension sessions; models are only
- * downloaded once unless the cache is cleared.
  */
 async function loadModel(url) {
   const cache = await caches.open(CACHE_NAME);
@@ -75,42 +47,33 @@ async function loadModel(url) {
 }
 
 /**
- * Singleton PaddleOCR service.
- * Initialized once on first OCR request (or on install via service worker pre-warm).
- * Subsequent calls reuse the same initialized service.
+ * Singleton: load recognition model + dictionary once.
  */
-async function ensurePaddleOcr() {
-  if (paddleOcr) return paddleOcr;
+async function ensureOcr() {
+  if (recSession && dictionary) return;
   if (initPromise) return initPromise;
 
   initPromise = (async () => {
     try {
-      console.log('[YCR:Offscreen] Waiting for OpenCV runtime...');
-      await waitForOpenCV();
-      console.log('[YCR:Offscreen] OpenCV ready. Loading PaddleOCR models...');
+      console.log('[YCR:Offscreen] Loading PaddleOCR rec model and dictionary...');
 
-      const [detBuffer, recBuffer, dictBuffer] = await Promise.all([
-        loadModel(MODEL_URLS.detection),
+      const [recBuffer, dictBuffer] = await Promise.all([
         loadModel(MODEL_URLS.recognition),
         loadModel(MODEL_URLS.dictionary),
       ]);
 
-      console.log('[YCR:Offscreen] Models loaded. Initializing PaddleOCR service...');
-      const service = new PaddleOcrService({
-        model: {
-          detection: detBuffer,
-          recognition: recBuffer,
-          charactersDictionary: dictBuffer,
-        },
-        session: { executionProviders: ['wasm'] },
+      // One character per line; blank token = last index (dictionary.length)
+      const dictText = new TextDecoder().decode(dictBuffer);
+      dictionary = dictText.trim().split('\n').map(l => l.trim());
+
+      recSession = await ort.InferenceSession.create(recBuffer, {
+        executionProviders: ['wasm'],
       });
-      await service.initialize();
-      paddleOcr = service;
-      console.log('[YCR:Offscreen] PaddleOCR initialized successfully.');
-      return paddleOcr;
+
+      console.log('[YCR:Offscreen] PaddleOCR initialized. Dict size:', dictionary.length);
     } catch (err) {
-      console.error('[YCR:Offscreen] PaddleOCR initialization failed:', err);
-      initPromise = null; // Allow retry on next message
+      console.error('[YCR:Offscreen] Init failed:', err);
+      initPromise = null; // Allow retry
       throw err;
     }
   })();
@@ -118,9 +81,66 @@ async function ensurePaddleOcr() {
   return initPromise;
 }
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log('[YCR:Offscreen] Received message:', message.action);
+/**
+ * Preprocess image for PaddleOCR recognition:
+ * - Resize to h=48, maintain aspect ratio (min w=32)
+ * - Normalize: pixel/127.5 - 1.0  (i.e. mean=0.5, std=0.5 on [0,1] range)
+ * - Returns Float32Array in NCHW layout [1, 3, 48, w]
+ */
+function preprocessImage(imageDataUrl) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const TARGET_H = 48;
+      const newW = Math.max(32, Math.round(img.width * TARGET_H / img.height));
 
+      const canvas = document.createElement('canvas');
+      canvas.width = newW;
+      canvas.height = TARGET_H;
+      canvas.getContext('2d').drawImage(img, 0, 0, newW, TARGET_H);
+      const { data } = canvas.getContext('2d').getImageData(0, 0, newW, TARGET_H);
+
+      // RGBA pixels → NCHW Float32 [1, 3, 48, newW]
+      const HW = TARGET_H * newW;
+      const tensor = new Float32Array(3 * HW);
+      for (let i = 0; i < HW; i++) {
+        tensor[i]          = data[i * 4]     / 127.5 - 1.0; // R
+        tensor[HW + i]     = data[i * 4 + 1] / 127.5 - 1.0; // G
+        tensor[HW * 2 + i] = data[i * 4 + 2] / 127.5 - 1.0; // B
+      }
+      resolve({ tensor, width: newW });
+    };
+    img.onerror = reject;
+    img.src = imageDataUrl;
+  });
+}
+
+/**
+ * CTC greedy decode.
+ * PaddleOCR: blank token = numClasses - 1 (last index).
+ */
+function ctcDecode(logits, seqLen, numClasses) {
+  const blank = numClasses - 1;
+  let prevIdx = -1;
+  let result = '';
+
+  for (let t = 0; t < seqLen; t++) {
+    let maxIdx = 0;
+    let maxVal = -Infinity;
+    for (let c = 0; c < numClasses; c++) {
+      const v = logits[t * numClasses + c];
+      if (v > maxVal) { maxVal = v; maxIdx = c; }
+    }
+    if (maxIdx !== blank && maxIdx !== prevIdx) {
+      result += dictionary[maxIdx] || '';
+    }
+    prevIdx = maxIdx;
+  }
+
+  return result;
+}
+
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.action !== 'OFFSCREEN_OCR_RECOGNIZE') return;
 
   (async () => {
@@ -130,30 +150,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
       }
 
-      const ocr = await ensurePaddleOcr();
+      await ensureOcr();
 
-      // Convert imageDataUrl to canvas
-      // PaddleOCR runs on the ORIGINAL image — no preprocessing
-      // Matches poc_2: paddleOcr.detect(inputPath) runs on unmodified image
-      const img = new Image();
-      img.src = message.imageDataUrl;
-      await img.decode();
-      const canvas = document.createElement('canvas');
-      canvas.width = img.width;
-      canvas.height = img.height;
-      canvas.getContext('2d').drawImage(img, 0, 0);
+      const { tensor, width } = await preprocessImage(message.imageDataUrl);
+      const inputTensor = new ort.Tensor('float32', tensor, [1, 3, 48, width]);
+      const results = await recSession.run({ x: inputTensor });
 
-      // Matches poc_2: const lines = await paddleOcr.detect(inputPath)
-      const result = await ocr.recognize(canvas);
-
-      // Matches poc_2: lines.map(l => l.text).join('')
-      const rawText = result.lines.flat().map(r => r.text).join('');
-
-      // Matches poc_2: toTraditional(...)
+      // Output key varies by export; grab first output
+      const output = results[Object.keys(results)[0]];
+      // dims: [1, seqLen, numClasses]
+      const [, seqLen, numClasses] = output.dims;
+      const rawText = ctcDecode(output.data, seqLen, numClasses);
       const text = toTraditional(rawText);
 
-      console.log('[YCR:Offscreen] PaddleOCR result:', text);
-      sendResponse({ ok: true, text, confidence: result.confidence || 0 });
+      console.log('[YCR:Offscreen] OCR result:', text);
+      sendResponse({ ok: true, text, confidence: 0 });
     } catch (err) {
       console.error('[YCR:Offscreen] OCR error:', err);
       sendResponse({ ok: false, error: err.message || String(err) });
