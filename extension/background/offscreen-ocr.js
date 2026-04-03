@@ -59,6 +59,15 @@ function cleanupSubtitleText(text, confidence) {
   return filtered;
 }
 
+async function loadLanguageData(langCode) {
+  const url = chrome.runtime.getURL(`tessdata/${langCode}.traineddata.gz`);
+  const res = await fetch(url);
+  if (!res || !res.ok) {
+    throw new Error(`Language data not found: ${langCode}.traineddata.gz`);
+  }
+  return new Uint8Array(await res.arrayBuffer());
+}
+
 async function preprocessForSubtitle(imageDataUrl) {
   const sourceImg = new Image();
   sourceImg.src = imageDataUrl;
@@ -113,20 +122,26 @@ async function ensureWorker() {
       const corePath = chrome.runtime.getURL('libs/tesseract-core/');
       const langPath = chrome.runtime.getURL('tessdata/');
       const workerPath = chrome.runtime.getURL('libs/tesseract/worker.min.js');
+      const langData = await loadLanguageData(selectedLang);
 
       console.log('[YCR:Offscreen] Starting Tesseract worker initialization...');
       const startTime = Date.now();
 
-      worker = await Tesseract.createWorker(selectedLang, 1, {
+      const workerPromise = Tesseract.createWorker([{ code: selectedLang, data: langData }], 1, {
         workerPath,
         corePath,
         langPath,
         cachePath: 'ycr-v2',
-        cacheMethod: 'refresh',
+        cacheMethod: 'none',
         workerBlobURL: false,
         gzip: true,
         logger: (m) => console.log('[YCR:Offscreen:Tesseract]', m.status, Math.round((m.progress || 0) * 100) + '%'),
       });
+
+      worker = await Promise.race([
+        workerPromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Worker init timeout')), 30000)),
+      ]);
 
       const elapsed = Date.now() - startTime;
       console.log(`[YCR:Offscreen] Tesseract worker initialized successfully in ${elapsed}ms`);

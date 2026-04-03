@@ -77,7 +77,12 @@ for domain in \
     "update.code.visualstudio.com" \
     "cdn.playwright.dev" \
     "playwright.download.prss.microsoft.com" \
-    "az764295.vo.msecnd.net"; do
+    "az764295.vo.msecnd.net" \
+    "pypi.org" \
+    "files.pythonhosted.org" \
+    "paddlepaddle.org.cn" \
+    "paddle-model-ecology.bj.bcebos.com" \
+    "bj.bcebos.com"; do
     echo "Resolving $domain..."
     ips=$(dig +noall +answer A "$domain" | awk '$4 == "A" {print $5}')
     if [ -z "$ips" ]; then
