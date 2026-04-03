@@ -13,6 +13,9 @@
   "dependencies": {
     "@tesseract.js-data/chi_sim": "^1.0.0",
     "@tesseract.js-data/chi_tra": "^1.0.0",
+    "onnxruntime-web": "^1.24.3",
+    "opencc-js": "^1.0.5",
+    "ppu-paddle-ocr": "^4.1.1",
     "sharp": "^0.34.5",
     "tesseract.js": "^7.0.0"
   },

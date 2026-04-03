@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "OCR hard-coded Chinese subtitles on YouTube videos",
   "permissions": ["activeTab", "scripting", "storage", "offscreen"],
-  "host_permissions": ["https://www.youtube.com/*"],
+  "host_permissions": ["https://www.youtube.com/*", "https://unpkg.com/*"],
   "background": {
     "service_worker": "background/service-worker.js"
   },
@@ -20,7 +20,7 @@
   "content_scripts": [
     {
       "matches": ["https://www.youtube.com/*"],
-      "js": ["libs/tesseract/tesseract.min.js", "dist/content.bundle.js"],
+      "js": ["dist/content.bundle.js"],
       "run_at": "document_idle",
       "all_frames": false
     }
@@ -30,12 +30,8 @@
   },
   "web_accessible_resources": [
     {
-      "resources": [
-        "libs/tesseract/worker.min.js",
-        "libs/tesseract-core/*",
-        "tessdata/*"
-      ],
-      "matches": ["https://www.youtube.com/*"]
+      "resources": ["libs/ort/*", "libs/opencv/*"],
+      "matches": ["<all_urls>"]
     }
   ]
 }

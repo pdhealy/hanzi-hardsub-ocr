@@ -1,166 +1,126 @@
-/* global Tesseract */
+/**
+ * Offscreen OCR worker — PaddleOCR implementation.
+ *
+ * Architecture:
+ *   - opencv.js loaded as <script> in offscreen-ocr.html (12MB, sets globalThis.cv)
+ *   - This bundle: ppu-paddle-ocr/web + opencc-js + onnxruntime-web JS
+ *   - ONNX Runtime WASM files: served from extension/libs/ort/ (set via ort.env.wasm.wasmPaths)
+ *   - PaddleOCR models: downloaded from unpkg.com on first install, cached in Cache Storage
+ *
+ * Matches poc_2/ocr_subtitles.js PaddleOCR behavior:
+ *   - Runs on original image (no preprocessing)
+ *   - lines.map(l => l.text).join('')
+ *   - toTraditional() via opencc-js Converter({ from: 'cn', to: 'twp' })
+ */
 
-console.log('[YCR:Offscreen] Document loaded, checking Tesseract...');
-console.log('[YCR:Offscreen] Tesseract available:', typeof Tesseract !== 'undefined');
+import { PaddleOcrService } from 'ppu-paddle-ocr/web';
+import { Converter } from 'opencc-js';
+import * as ort from 'onnxruntime-web';
 
-if (typeof Tesseract === 'undefined') {
-  console.error('[YCR:Offscreen] CRITICAL: Tesseract not loaded!');
-}
+// Point ONNX Runtime WASM loader to locally bundled files
+// Avoids CSP issues (script-src 'self') and ensures offline access
+ort.env.wasm.wasmPaths = chrome.runtime.getURL('libs/ort/');
 
-const PARAM_NOT_FOUND_PREFIX = 'Warning: Parameter not found:';
-const originalConsoleWarn = console.warn.bind(console);
-console.warn = (...args) => {
-  const first = args[0];
-  if (typeof first === 'string' && first.startsWith(PARAM_NOT_FOUND_PREFIX)) {
-    return;
-  }
-  originalConsoleWarn(...args);
+// OpenCC: Simplified Chinese → Traditional Chinese (Taiwan Phrases)
+// Matches poc_2: opencc.Converter({ from: 'cn', to: 'twp' })
+const toTraditional = Converter({ from: 'cn', to: 'twp' });
+
+// Chinese PP-OCRv4 models — same models used by @gutenye/ocr-node in poc_2
+// Cached in Cache Storage after first download (one-time on extension init)
+const CACHE_NAME = 'ycr-paddle-models-v1';
+const MODEL_URLS = {
+  detection: 'https://unpkg.com/@gutenye/ocr-models@1.4.2/assets/ch_PP-OCRv4_det_infer.onnx',
+  recognition: 'https://unpkg.com/@gutenye/ocr-models@1.4.2/assets/ch_PP-OCRv4_rec_infer.onnx',
+  dictionary: 'https://unpkg.com/@gutenye/ocr-models@1.4.2/assets/ppocr_keys_v1.txt',
 };
 
-let worker = null;
-let workerInitPromise = null;
-let selectedLang = 'chi_sim';
+let paddleOcr = null;
+let initPromise = null;
 
-async function pickBestLanguage() {
-  const traUrl = chrome.runtime.getURL('tessdata/chi_tra.traineddata.gz');
-  const simUrl = chrome.runtime.getURL('tessdata/chi_sim.traineddata.gz');
-
-  const [traRes, simRes] = await Promise.all([
-    fetch(traUrl, { method: 'HEAD' }).catch(() => null),
-    fetch(simUrl, { method: 'HEAD' }).catch(() => null),
-  ]);
-
-  const hasTra = !!(traRes && traRes.ok);
-  const hasSim = !!(simRes && simRes.ok);
-
-  if (hasTra) return 'chi_tra';
-  if (hasSim) return 'chi_sim';
-  throw new Error('No Chinese OCR language data found in tessdata/');
+/**
+ * Wait for opencv.js WASM runtime to be fully initialized.
+ * opencv.js is loaded as a <script> tag and initializes asynchronously.
+ * ppu-ocv/web's initRuntime() checks globalThis.cv?.Mat before any dynamic imports.
+ */
+function waitForOpenCV() {
+  return new Promise((resolve) => {
+    /* global cv */
+    if (typeof cv !== 'undefined' && cv.Mat) { resolve(); return; }
+    const check = setInterval(() => {
+      if (typeof cv !== 'undefined') {
+        clearInterval(check);
+        if (cv.Mat) resolve();
+        else cv.onRuntimeInitialized = resolve;
+      }
+    }, 50);
+  });
 }
 
-function cleanupSubtitleText(text, confidence) {
-  const clean = (text || '').replace(/\s+/g, ' ').trim();
-  if (!clean) return '';
-
-  // Fast sanity filters for subtitle-like Chinese output without expensive extra OCR passes.
-  const subtitleWhitelist = /[\u3400-\u9fff0-9A-Za-z，。！？：；、「」『』（）《》〈〉—…·,.!?:;'"()\-\s]/;
-  const filtered = [...clean].filter((ch) => subtitleWhitelist.test(ch)).join('').replace(/\s+/g, ' ').trim();
-  if (!filtered) return '';
-
-  if (filtered.length > 36) return '';
-
-  const lineCount = filtered.split(/\n+/).length;
-  if (lineCount > 2) return '';
-
-  const cjkMatches = filtered.match(/[\u3400-\u9fff]/g) || [];
-  const cjkRatio = cjkMatches.length / filtered.length;
-
-  if (cjkRatio < 0.2 && Number(confidence || 0) < 60) return '';
-  return filtered;
+/**
+ * Fetch model from URL, cache in Cache Storage, return ArrayBuffer.
+ * Cache Storage persists across extension sessions; models are only
+ * downloaded once unless the cache is cleared.
+ */
+async function loadModel(url) {
+  const cache = await caches.open(CACHE_NAME);
+  let response = await cache.match(url);
+  if (!response) {
+    console.log('[YCR:Offscreen] Downloading model:', url);
+    response = await fetch(url);
+    if (!response.ok) throw new Error(`Failed to fetch model: ${url} (${response.status})`);
+    await cache.put(url, response.clone());
+    console.log('[YCR:Offscreen] Model cached:', url);
+  }
+  return response.arrayBuffer();
 }
 
-async function loadLanguageData(langCode) {
-  const url = chrome.runtime.getURL(`tessdata/${langCode}.traineddata.gz`);
-  const res = await fetch(url);
-  if (!res || !res.ok) {
-    throw new Error(`Language data not found: ${langCode}.traineddata.gz`);
-  }
-  return new Uint8Array(await res.arrayBuffer());
-}
+/**
+ * Singleton PaddleOCR service.
+ * Initialized once on first OCR request (or on install via service worker pre-warm).
+ * Subsequent calls reuse the same initialized service.
+ */
+async function ensurePaddleOcr() {
+  if (paddleOcr) return paddleOcr;
+  if (initPromise) return initPromise;
 
-async function preprocessForSubtitle(imageDataUrl) {
-  const sourceImg = new Image();
-  sourceImg.src = imageDataUrl;
-  await sourceImg.decode();
-
-  const scale = 2;
-  const canvas = document.createElement('canvas');
-  canvas.width = sourceImg.width * scale;
-  canvas.height = sourceImg.height * scale;
-  const ctx = canvas.getContext('2d');
-  ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(sourceImg, 0, 0, canvas.width, canvas.height);
-
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const data = imageData.data;
-
-  const luminance = new Uint8Array(canvas.width * canvas.height);
-  let minLum = 255;
-  let maxLum = 0;
-  for (let i = 0, p = 0; i < data.length; i += 4, p += 1) {
-    const lum = Math.round((data[i] * 299 + data[i + 1] * 587 + data[i + 2] * 114) / 1000);
-    luminance[p] = lum;
-    if (lum < minLum) minLum = lum;
-    if (lum > maxLum) maxLum = lum;
-  }
-
-  const range = Math.max(1, maxLum - minLum);
-  const threshold = Math.min(235, Math.max(130, minLum + range * 0.68));
-
-  for (let i = 0, p = 0; i < data.length; i += 4, p += 1) {
-    const bw = luminance[p] >= threshold ? 255 : 0;
-    data[i] = bw;
-    data[i + 1] = bw;
-    data[i + 2] = bw;
-    data[i + 3] = 255;
-  }
-
-  ctx.putImageData(imageData, 0, 0);
-  return canvas.toDataURL('image/png');
-}
-
-async function ensureWorker() {
-  if (worker) return worker;
-  if (workerInitPromise) {
-    // Wait for existing initialization to complete
-    return workerInitPromise;
-  }
-
-  workerInitPromise = (async () => {
+  initPromise = (async () => {
     try {
-      selectedLang = await pickBestLanguage();
-      const corePath = chrome.runtime.getURL('libs/tesseract-core/');
-      const langPath = chrome.runtime.getURL('tessdata/');
-      const workerPath = chrome.runtime.getURL('libs/tesseract/worker.min.js');
-      const langData = await loadLanguageData(selectedLang);
+      console.log('[YCR:Offscreen] Waiting for OpenCV runtime...');
+      await waitForOpenCV();
+      console.log('[YCR:Offscreen] OpenCV ready. Loading PaddleOCR models...');
 
-      console.log('[YCR:Offscreen] Starting Tesseract worker initialization...');
-      const startTime = Date.now();
-
-      const workerPromise = Tesseract.createWorker([{ code: selectedLang, data: langData }], 1, {
-        workerPath,
-        corePath,
-        langPath,
-        cachePath: 'ycr-v2',
-        cacheMethod: 'none',
-        workerBlobURL: false,
-        gzip: true,
-        logger: (m) => console.log('[YCR:Offscreen:Tesseract]', m.status, Math.round((m.progress || 0) * 100) + '%'),
-      });
-
-      worker = await Promise.race([
-        workerPromise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Worker init timeout')), 30000)),
+      const [detBuffer, recBuffer, dictBuffer] = await Promise.all([
+        loadModel(MODEL_URLS.detection),
+        loadModel(MODEL_URLS.recognition),
+        loadModel(MODEL_URLS.dictionary),
       ]);
 
-      const elapsed = Date.now() - startTime;
-      console.log(`[YCR:Offscreen] Tesseract worker initialized successfully in ${elapsed}ms`);
-      return worker;
+      console.log('[YCR:Offscreen] Models loaded. Initializing PaddleOCR service...');
+      const service = new PaddleOcrService({
+        model: {
+          detection: detBuffer,
+          recognition: recBuffer,
+          charactersDictionary: dictBuffer,
+        },
+        session: { executionProviders: ['wasm'] },
+      });
+      await service.initialize();
+      paddleOcr = service;
+      console.log('[YCR:Offscreen] PaddleOCR initialized successfully.');
+      return paddleOcr;
     } catch (err) {
-      console.error('[YCR:Offscreen] Worker initialization failed:', err);
-      // Clear promise on error so it can be retried
-      workerInitPromise = null;
-      worker = null;
+      console.error('[YCR:Offscreen] PaddleOCR initialization failed:', err);
+      initPromise = null; // Allow retry on next message
       throw err;
     }
   })();
 
-  return workerInitPromise;
+  return initPromise;
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('[YCR:Offscreen] Received message:', message.action);
-  
+
   if (message.action !== 'OFFSCREEN_OCR_RECOGNIZE') return;
 
   (async () => {
@@ -169,26 +129,31 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ ok: false, error: 'Missing imageDataUrl' });
         return;
       }
-      console.log('[YCR:Offscreen] About to ensure worker...');
-      const w = await ensureWorker();
-      console.log('[YCR:Offscreen] Worker ensured, preprocessing image...');
-      const enhancedImageDataUrl = await preprocessForSubtitle(message.imageDataUrl);
-      console.log('[YCR:Offscreen] Image preprocessed, running OCR...');
-      const options = {
-        tessedit_pageseg_mode: '7',
-        preserve_interword_spaces: '1',
-        tessedit_do_invert: '0',
-        user_defined_dpi: '300',
-      };
-      const result = await w.recognize(enhancedImageDataUrl, options, { text: true });
-      const cleanedText = cleanupSubtitleText(result.data.text, result.data.confidence);
-      console.log('[YCR:Offscreen] OCR complete, text:', cleanedText);
 
-      sendResponse({
-        ok: true,
-        text: cleanedText,
-        confidence: result.data.confidence || 0,
-      });
+      const ocr = await ensurePaddleOcr();
+
+      // Convert imageDataUrl to canvas
+      // PaddleOCR runs on the ORIGINAL image — no preprocessing
+      // Matches poc_2: paddleOcr.detect(inputPath) runs on unmodified image
+      const img = new Image();
+      img.src = message.imageDataUrl;
+      await img.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+
+      // Matches poc_2: const lines = await paddleOcr.detect(inputPath)
+      const result = await ocr.recognize(canvas);
+
+      // Matches poc_2: lines.map(l => l.text).join('')
+      const rawText = result.lines.flat().map(r => r.text).join('');
+
+      // Matches poc_2: toTraditional(...)
+      const text = toTraditional(rawText);
+
+      console.log('[YCR:Offscreen] PaddleOCR result:', text);
+      sendResponse({ ok: true, text, confidence: result.confidence || 0 });
     } catch (err) {
       console.error('[YCR:Offscreen] OCR error:', err);
       sendResponse({ ok: false, error: err.message || String(err) });

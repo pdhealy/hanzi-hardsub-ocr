@@ -19,8 +19,14 @@ async function ensureOffscreenDocument() {
   await new Promise(resolve => setTimeout(resolve, 500));
 }
 
-chrome.runtime.onInstalled.addListener(() => {
-  console.log('[YCR] YouTube Chinese Reader installed');
+chrome.runtime.onInstalled.addListener(async () => {
+  console.log('[YCR] YouTube Chinese Reader installed. Pre-loading PaddleOCR models...');
+  try {
+    await ensureOffscreenDocument();
+    console.log('[YCR] Offscreen document created — model download initiated.');
+  } catch (err) {
+    console.warn('[YCR] Model pre-load setup failed (will retry on first OCR):', err.message);
+  }
 });
 
 // Handle messages from content scripts and side panel
