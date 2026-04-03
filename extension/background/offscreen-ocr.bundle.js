@@ -10692,9 +10692,20 @@ ${u}`, c = n.createShaderModule({ code: d, label: e.name });
   var toTraditional = Converter({ from: "cn", to: "twp" });
   var CACHE_NAME = "ycr-paddle-models-v1";
   var MODEL_URLS = {
+    detection: "https://unpkg.com/@gutenye/ocr-models@1.4.2/assets/ch_PP-OCRv4_det_infer.onnx",
     recognition: "https://unpkg.com/@gutenye/ocr-models@1.4.2/assets/ch_PP-OCRv4_rec_infer.onnx",
     dictionary: "https://unpkg.com/@gutenye/ocr-models@1.4.2/assets/ppocr_keys_v1.txt"
   };
+  var DET_MEAN = [0.485, 0.456, 0.406];
+  var DET_STD = [0.229, 0.224, 0.225];
+  var DET_MAX_SIDE = 640;
+  var DET_THRESHOLD = 0.3;
+  var DET_MIN_AREA = 25;
+  var DET_PAD_V = 0.4;
+  var DET_PAD_H = 0.6;
+  var REC_TARGET_H = 48;
+  var REC_MIN_W = 8;
+  var detSession = null;
   var recSession = null;
   var dictionary = null;
   var initPromise = null;
@@ -10711,21 +10722,23 @@ ${u}`, c = n.createShaderModule({ code: d, label: e.name });
     return response.arrayBuffer();
   }
   async function ensureOcr() {
-    if (recSession && dictionary) return;
+    if (detSession && recSession && dictionary) return;
     if (initPromise) return initPromise;
     initPromise = (async () => {
       try {
-        console.log("[YCR:Offscreen] Loading PaddleOCR rec model and dictionary...");
-        const [recBuffer, dictBuffer] = await Promise.all([
+        console.log("[YCR:Offscreen] Loading PaddleOCR models (detection + recognition)...");
+        const [detBuffer, recBuffer, dictBuffer] = await Promise.all([
+          loadModel(MODEL_URLS.detection),
           loadModel(MODEL_URLS.recognition),
           loadModel(MODEL_URLS.dictionary)
         ]);
         const dictText = new TextDecoder().decode(dictBuffer);
         dictionary = dictText.trim().split("\n").map((l) => l.trim());
-        recSession = await vf.create(recBuffer, {
-          executionProviders: ["wasm"]
-        });
-        console.log("[YCR:Offscreen] PaddleOCR initialized. Dict size:", dictionary.length);
+        [detSession, recSession] = await Promise.all([
+          vf.create(detBuffer, { executionProviders: ["wasm"] }),
+          vf.create(recBuffer, { executionProviders: ["wasm"] })
+        ]);
+        console.log("[YCR:Offscreen] PaddleOCR ready. Dict size:", dictionary.length);
       } catch (err) {
         console.error("[YCR:Offscreen] Init failed:", err);
         initPromise = null;
@@ -10734,37 +10747,147 @@ ${u}`, c = n.createShaderModule({ code: d, label: e.name });
     })();
     return initPromise;
   }
-  function preprocessImage(imageDataUrl) {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => {
-        const TARGET_H = 48;
-        const newW = Math.max(32, Math.round(img.width * TARGET_H / img.height));
-        const canvas = document.createElement("canvas");
-        canvas.width = newW;
-        canvas.height = TARGET_H;
-        canvas.getContext("2d").drawImage(img, 0, 0, newW, TARGET_H);
-        const { data } = canvas.getContext("2d").getImageData(0, 0, newW, TARGET_H);
-        const HW = TARGET_H * newW;
-        const tensor = new Float32Array(3 * HW);
-        for (let i = 0; i < HW; i++) {
-          tensor[i] = data[i * 4] / 127.5 - 1;
-          tensor[HW + i] = data[i * 4 + 1] / 127.5 - 1;
-          tensor[HW * 2 + i] = data[i * 4 + 2] / 127.5 - 1;
+  function preprocessForDetection(srcCanvas) {
+    const origW = srcCanvas.width;
+    const origH = srcCanvas.height;
+    let ratio = 1;
+    if (Math.max(origW, origH) > DET_MAX_SIDE) {
+      ratio = DET_MAX_SIDE / Math.max(origW, origH);
+    }
+    const resizeW = Math.round(origW * ratio);
+    const resizeH = Math.round(origH * ratio);
+    const modelW = Math.ceil(resizeW / 32) * 32;
+    const modelH = Math.ceil(resizeH / 32) * 32;
+    const canvas = document.createElement("canvas");
+    canvas.width = modelW;
+    canvas.height = modelH;
+    canvas.getContext("2d").drawImage(srcCanvas, 0, 0, resizeW, resizeH);
+    const { data } = canvas.getContext("2d").getImageData(0, 0, modelW, modelH);
+    const HW = modelH * modelW;
+    const tensor = new Float32Array(3 * HW);
+    for (let i = 0; i < HW; i++) {
+      for (let c = 0; c < 3; c++) {
+        tensor[c * HW + i] = (data[i * 4 + c] / 255 - DET_MEAN[c]) / DET_STD[c];
+      }
+    }
+    return { tensor, modelW, modelH, resizeRatio: ratio, origW, origH };
+  }
+  function postprocessDetection(probData, modelW, modelH, resizeRatio, origW, origH) {
+    const binary = new Uint8Array(modelH * modelW);
+    for (let i = 0; i < binary.length; i++) {
+      binary[i] = probData[i] >= DET_THRESHOLD ? 1 : 0;
+    }
+    const visited = new Uint8Array(modelH * modelW);
+    const boxes = [];
+    for (let y = 0; y < modelH; y++) {
+      for (let x = 0; x < modelW; x++) {
+        const idx = y * modelW + x;
+        if (!binary[idx] || visited[idx]) continue;
+        const queue = [idx];
+        visited[idx] = 1;
+        let head = 0;
+        let minX = x, maxX = x, minY = y, maxY = y;
+        while (head < queue.length) {
+          const cur = queue[head++];
+          const cx = cur % modelW;
+          const cy2 = (cur - cx) / modelW;
+          if (cx < minX) minX = cx;
+          if (cx > maxX) maxX = cx;
+          if (cy2 < minY) minY = cy2;
+          if (cy2 > maxY) maxY = cy2;
+          if (cx > 0) {
+            const n = cur - 1;
+            if (binary[n] && !visited[n]) {
+              visited[n] = 1;
+              queue.push(n);
+            }
+          }
+          if (cx < modelW - 1) {
+            const n = cur + 1;
+            if (binary[n] && !visited[n]) {
+              visited[n] = 1;
+              queue.push(n);
+            }
+          }
+          if (cy2 > 0) {
+            const n = cur - modelW;
+            if (binary[n] && !visited[n]) {
+              visited[n] = 1;
+              queue.push(n);
+            }
+          }
+          if (cy2 < modelH - 1) {
+            const n = cur + modelW;
+            if (binary[n] && !visited[n]) {
+              visited[n] = 1;
+              queue.push(n);
+            }
+          }
         }
-        resolve({ tensor, width: newW });
-      };
-      img.onerror = reject;
-      img.src = imageDataUrl;
+        const area = (maxX - minX + 1) * (maxY - minY + 1);
+        if (area < DET_MIN_AREA) continue;
+        const bh2 = maxY - minY + 1;
+        const vpad = Math.round(bh2 * DET_PAD_V);
+        const hpad = Math.round(bh2 * DET_PAD_H);
+        const px = Math.max(0, minX - hpad);
+        const py2 = Math.max(0, minY - vpad);
+        const px2 = Math.min(modelW, maxX + 1 + hpad);
+        const py22 = Math.min(modelH, maxY + 1 + vpad);
+        const scale = 1 / resizeRatio;
+        const ox = Math.max(0, Math.round(px * scale));
+        const oy2 = Math.max(0, Math.round(py2 * scale));
+        const ox2 = Math.min(origW, Math.round(px2 * scale));
+        const oy22 = Math.min(origH, Math.round(py22 * scale));
+        const fw = ox2 - ox;
+        const fh2 = oy22 - oy2;
+        if (fw > 5 && fh2 > 5) {
+          boxes.push({ x: ox, y: oy2, width: fw, height: fh2 });
+        }
+      }
+    }
+    boxes.sort((a, b) => {
+      if (Math.abs(a.y - b.y) < (a.height + b.height) / 4) return a.x - b.x;
+      return a.y - b.y;
     });
+    return boxes;
+  }
+  async function detectTextRegions(srcCanvas) {
+    const { tensor, modelW, modelH, resizeRatio, origW, origH } = preprocessForDetection(srcCanvas);
+    const inputTensor = new Ke("float32", tensor, [1, 3, modelH, modelW]);
+    let output;
+    try {
+      const results = await detSession.run({ x: inputTensor });
+      output = results[Object.keys(results)[0]];
+    } finally {
+      inputTensor.dispose();
+    }
+    return postprocessDetection(output.data, modelW, modelH, resizeRatio, origW, origH);
+  }
+  function preprocessForRecognition(cropCanvas) {
+    const newW = Math.max(
+      REC_MIN_W,
+      Math.round(cropCanvas.width * REC_TARGET_H / cropCanvas.height)
+    );
+    const canvas = document.createElement("canvas");
+    canvas.width = newW;
+    canvas.height = REC_TARGET_H;
+    canvas.getContext("2d").drawImage(cropCanvas, 0, 0, newW, REC_TARGET_H);
+    const { data } = canvas.getContext("2d").getImageData(0, 0, newW, REC_TARGET_H);
+    const HW = REC_TARGET_H * newW;
+    const tensor = new Float32Array(3 * HW);
+    for (let i = 0; i < HW; i++) {
+      tensor[i] = data[i * 4] / 127.5 - 1;
+      tensor[HW + i] = data[i * 4 + 1] / 127.5 - 1;
+      tensor[HW * 2 + i] = data[i * 4 + 2] / 127.5 - 1;
+    }
+    return { tensor, width: newW };
   }
   function ctcDecode(logits, seqLen, numClasses) {
     const blank = numClasses - 1;
     let prevIdx = -1;
     let result = "";
     for (let t = 0; t < seqLen; t++) {
-      let maxIdx = 0;
-      let maxVal = -Infinity;
+      let maxIdx = 0, maxVal = -Infinity;
       for (let c = 0; c < numClasses; c++) {
         const v = logits[t * numClasses + c];
         if (v > maxVal) {
@@ -10779,6 +10902,32 @@ ${u}`, c = n.createShaderModule({ code: d, label: e.name });
     }
     return result;
   }
+  async function recognizeCrop(srcCanvas, box) {
+    const cropCanvas = document.createElement("canvas");
+    cropCanvas.width = box.width;
+    cropCanvas.height = box.height;
+    cropCanvas.getContext("2d").drawImage(
+      srcCanvas,
+      box.x,
+      box.y,
+      box.width,
+      box.height,
+      0,
+      0,
+      box.width,
+      box.height
+    );
+    const { tensor, width } = preprocessForRecognition(cropCanvas);
+    const inputTensor = new Ke("float32", tensor, [1, 3, REC_TARGET_H, width]);
+    try {
+      const results = await recSession.run({ x: inputTensor });
+      const output = results[Object.keys(results)[0]];
+      const [, seqLen, numClasses] = output.dims;
+      return ctcDecode(output.data, seqLen, numClasses);
+    } finally {
+      inputTensor.dispose();
+    }
+  }
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message.action !== "OFFSCREEN_OCR_RECOGNIZE") return;
     (async () => {
@@ -10788,13 +10937,25 @@ ${u}`, c = n.createShaderModule({ code: d, label: e.name });
           return;
         }
         await ensureOcr();
-        const { tensor, width } = await preprocessImage(message.imageDataUrl);
-        const inputTensor = new Ke("float32", tensor, [1, 3, 48, width]);
-        const results = await recSession.run({ x: inputTensor });
-        const output = results[Object.keys(results)[0]];
-        const [, seqLen, numClasses] = output.dims;
-        const rawText = ctcDecode(output.data, seqLen, numClasses);
-        const text = toTraditional(rawText);
+        const img = new Image();
+        img.src = message.imageDataUrl;
+        await img.decode();
+        const srcCanvas = document.createElement("canvas");
+        srcCanvas.width = img.width;
+        srcCanvas.height = img.height;
+        srcCanvas.getContext("2d").drawImage(img, 0, 0);
+        const boxes = await detectTextRegions(srcCanvas);
+        console.log("[YCR:Offscreen] Detected", boxes.length, "text region(s)");
+        if (boxes.length === 0) {
+          sendResponse({ ok: true, text: "", confidence: 0 });
+          return;
+        }
+        const parts = [];
+        for (const box of boxes) {
+          const rawText = await recognizeCrop(srcCanvas, box);
+          if (rawText) parts.push(rawText);
+        }
+        const text = toTraditional(parts.join(""));
         console.log("[YCR:Offscreen] OCR result:", text);
         sendResponse({ ok: true, text, confidence: 0 });
       } catch (err) {
