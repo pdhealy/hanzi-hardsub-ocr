@@ -240,12 +240,12 @@ async function testMessageHandler(browser) {
       }
     };
 
-    // Mock opencc-js: just echo simplified text
-    const mockConverter = () => (text) => '【TRAD:' + text + '】';
+    // Mock opencc-js: Converter(opts) returns a translator function
+    const mockConverter = (_opts) => (text) => '【TRAD:' + text + '】';
 
     // Mock caches / fetch for model loading
     const mockBuffer = (text) => new TextEncoder().encode(text).buffer;
-    global.caches = {
+    window.caches = {
       open: async () => ({
         match: async () => new Response(mockBuffer(dictLines.join('\n'))),
         put: async () => {},
@@ -253,13 +253,13 @@ async function testMessageHandler(browser) {
     };
 
     // Mock chrome.runtime.getURL
-    global.chrome = { runtime: { getURL: (p) => 'chrome-extension://test/' + p } };
+    window.chrome = { runtime: { getURL: (p) => 'chrome-extension://test/' + p } };
 
     // ── Inline the pipeline (matching offscreen-ocr.js logic) ───────────────
 
     mockOrt.env.wasm.wasmPaths = chrome.runtime.getURL('libs/ort/');
 
-    const toTraditional = mockConverter()({ from: 'cn', to: 'twp' });
+    const toTraditional = mockConverter({ from: 'cn', to: 'twp' });
 
     let recSession = null;
     let dictionary = null;
