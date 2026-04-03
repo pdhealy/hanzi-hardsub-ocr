@@ -15,8 +15,11 @@ let isLooping = false;
 let isTicking = false;
 let lastRecognizedText = '';
 let scanCount = 0;
-const OCR_INIT_TIMEOUT_MS = 60000;  // Generous timeout for first OCR call which initializes worker
-const OCR_SCAN_TIMEOUT_MS = 25000;
+// First call: download det (~4.9MB) + rec (~12MB) + dict + create 2 ONNX sessions
+const OCR_INIT_TIMEOUT_MS = 120000;
+// Subsequent calls: offscreen doc may be unloaded between scans, forcing re-init of
+// 2 ONNX sessions from Cache Storage (~20-30s). Keep well above that.
+const OCR_SCAN_TIMEOUT_MS = 60000;
 
 // Settings defaults — must match keys used by extension/options/options.js
 const SETTINGS_DEFAULTS = { ycrFontSize: 14, ycrFontColor: '#111827', ycrBgOpacity: 1.0 };

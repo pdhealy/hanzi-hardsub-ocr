@@ -960,8 +960,8 @@
   var isTicking = false;
   var lastRecognizedText = "";
   var scanCount = 0;
-  var OCR_INIT_TIMEOUT_MS = 6e4;
-  var OCR_SCAN_TIMEOUT_MS = 25e3;
+  var OCR_INIT_TIMEOUT_MS = 12e4;
+  var OCR_SCAN_TIMEOUT_MS = 6e4;
   var SETTINGS_DEFAULTS = { ycrFontSize: 14, ycrFontColor: "#111827", ycrBgOpacity: 1 };
   var SETTING_KEYS = ["ycrFontSize", "ycrFontColor", "ycrBgOpacity"];
   function loadAndApplySettings() {
