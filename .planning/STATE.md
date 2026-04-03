@@ -5,13 +5,13 @@ milestone_name: milestone
 current_phase: 4
 current_plan: Not started
 status: Ready to plan
-stopped_at: Completed 03-03-PLAN.md
-last_updated: "2026-04-01T01:02:08.129Z"
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-04-03T09:45:00.433Z"
 progress:
   total_phases: 5
-  completed_phases: 3
-  total_plans: 9
-  completed_plans: 9
+  completed_phases: 4
+  total_plans: 10
+  completed_plans: 10
 ---
 
 # Project State
@@ -20,8 +20,8 @@ This file tracks the current state of the project.
 
 - **Current Phase:** 4
 - **Current Plan:** Not started
-- **Last Session:** 2026-04-01T00:54:07.983Z
-- **Stopped At:** Completed 03-03-PLAN.md
+- **Last Session:** 2026-04-03T09:45:00.428Z
+- **Stopped At:** Completed 04-01-PLAN.md
 
 ## Progress
 
@@ -51,6 +51,7 @@ This file tracks the current state of the project.
 - [Phase 03-02]: Public applySettings() on SidePanel wraps _applySettings() to accept content.js callers without exposing internal key format
 - [Phase 03-02]: loadAndApplySettings() called at both SHOW_PANEL and startLiveLoop so settings apply before any entries render regardless of which code path shows the panel
 - [Phase 03-03]: OPEN_SETTINGS handler uses chrome.runtime.getURL to construct the options page URL — avoids hardcoding extension ID and works in all Chrome environments
+- [Phase 04]: onnxruntime-web v1.24.3 ships threaded WASM only; copy ort-wasm-simd-threaded.wasm/.mjs (not non-threaded variants assumed by plan)
 
 ## Performance Metrics
 
@@ -64,6 +65,7 @@ This file tracks the current state of the project.
 | 03    | 01   | 2 min    | 3     | 7 files |
 | 03    | 02   | 2 min    | 2     | 3 files |
 | Phase 03 P03 | 2 | 1 tasks | 1 files |
+| Phase 04 P01 | 2 min | 8 tasks | 10 files |
 
 ## Blockers
 
