@@ -19,7 +19,8 @@ async function getActiveYouTubeTab() {
 
 /**
  * Send a message to the content script in the active YouTube tab.
- * Returns undefined (no error) when not on a YouTube page.
+ * Returns undefined (no error) when not on a YouTube page or when the
+ * content script is still initialising.
  * @param {Object} message
  * @returns {Promise<any>} response from content script, or undefined
  */
@@ -29,8 +30,15 @@ async function sendToContentScript(message) {
   try {
     return await chrome.tabs.sendMessage(tab.id, message);
   } catch (err) {
-    // Content script may still be initializing on this YouTube page
-    console.warn('Content script not ready:', err);
+    // "Receiving end does not exist" is the expected transient state while the
+    // content script is still loading on this YouTube page.  It is recoverable:
+    // the popup just shows its default inactive state.  Do NOT use console.warn
+    // or console.error here — Chrome's Extensions error panel captures both and
+    // surfaces them as reported errors, which is misleading for expected behavior.
+    if (!err?.message?.includes('Receiving end does not exist')) {
+      // Genuinely unexpected error — log at debug level (not captured by panel)
+      console.debug('[YCR:Popup] Unexpected messaging error:', err);
+    }
   }
 }
 

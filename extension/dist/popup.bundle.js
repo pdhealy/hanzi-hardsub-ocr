@@ -16,7 +16,9 @@
     try {
       return await chrome.tabs.sendMessage(tab.id, message);
     } catch (err) {
-      console.warn("Content script not ready:", err);
+      if (!err?.message?.includes("Receiving end does not exist")) {
+        console.debug("[YCR:Popup] Unexpected messaging error:", err);
+      }
     }
   }
   function setStatus(state) {

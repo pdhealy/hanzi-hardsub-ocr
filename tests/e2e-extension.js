@@ -13,16 +13,19 @@
  *                         collide on a still-running timer label.
  *
  * Tests:
- *   1. Source config     — offscreen-ocr.js wasmPaths uses { wasm, mjs } short keys
- *   2. JSEP files absent — no jsep.wasm / jsep.mjs in extension/libs/ort/
- *   3. Bundle integrity  — bundle preserves short keys, no full-filename key pattern
- *   4. Extension load    — service worker registers, URL matches expected pattern
- *   5. No startup errors — popup page loads without pageerror events
- *   6. Non-YouTube guard — popup on non-YouTube tab: no "Receiving end" error,
- *                          status label shows "Open YouTube to use", buttons disabled
- *   7. SW connectivity   — OPEN_SETTINGS action returns { ok: true }
- *   8. OCR pipeline      — OCR_RECOGNIZE_IMAGE response free of the errors we fixed
- *   9. Timer collision   — two rapid OCR calls both complete without timer errors
+ *   1.  Source config      — offscreen-ocr.js wasmPaths uses { wasm, mjs } short keys
+ *   2.  JSEP files absent  — no jsep.wasm / jsep.mjs in extension/libs/ort/
+ *   3.  Bundle integrity   — bundle preserves short keys, no full-filename key pattern
+ *   3b. Popup warn-free    — popup.bundle.js has no console.warn inside sendToContentScript
+ *   3c. Content bundle     — content.bundle.js is present and non-empty
+ *   4.  Extension load     — service worker registers, URL matches expected pattern
+ *   5.  No startup errors  — popup page loads without pageerror events
+ *   6.  Non-YouTube guard  — popup on non-YouTube tab: no "Receiving end" error,
+ *                            status label shows "Open YouTube to use", buttons disabled
+ *   7.  SW connectivity    — OPEN_SETTINGS action returns { ok: true }
+ *   8.  Content script     — loads on mock YouTube page with zero page errors
+ *   9.  OCR pipeline       — OCR_RECOGNIZE_IMAGE response free of the errors we fixed
+ *  10.  Timer collision    — two rapid OCR calls both complete without timer errors
  *
  * Run:
  *   node tests/e2e-extension.js
@@ -45,10 +48,12 @@ const os           = require('os');
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const EXTENSION_PATH  = path.resolve(__dirname, '../extension');
-const SOURCE_OCR_PATH = path.resolve(__dirname, '../extension/background/offscreen-ocr.js');
-const BUNDLE_PATH     = path.resolve(__dirname, '../extension/background/offscreen-ocr.bundle.js');
-const ORT_LIBS_PATH   = path.resolve(__dirname, '../extension/libs/ort');
+const EXTENSION_PATH       = path.resolve(__dirname, '../extension');
+const SOURCE_OCR_PATH      = path.resolve(__dirname, '../extension/background/offscreen-ocr.js');
+const BUNDLE_PATH          = path.resolve(__dirname, '../extension/background/offscreen-ocr.bundle.js');
+const POPUP_BUNDLE_PATH    = path.resolve(__dirname, '../extension/dist/popup.bundle.js');
+const CONTENT_BUNDLE_PATH  = path.resolve(__dirname, '../extension/dist/content.bundle.js');
+const ORT_LIBS_PATH        = path.resolve(__dirname, '../extension/libs/ort');
 
 // Model download can take several minutes on a cold cache — be generous.
 const OCR_TIMEOUT_MS    = 5 * 60 * 1000; // 5 minutes
@@ -187,7 +192,57 @@ function testBundleWasmPathsKeys() {
   );
 }
 
-// ── Tests 4-8 — Live extension in real Chromium ───────────────────────────────
+// ── Test 3b — Popup bundle: no console.warn inside sendToContentScript ────────
+
+function testPopupBundleNoWarn() {
+  console.log('\nTest 3b: Popup bundle — no console.warn inside sendToContentScript');
+
+  if (!fs.existsSync(POPUP_BUNDLE_PATH)) {
+    assert(false, `popup.bundle.js exists at ${POPUP_BUNDLE_PATH}`);
+    return;
+  }
+
+  const bundle = fs.readFileSync(POPUP_BUNDLE_PATH, 'utf8');
+
+  // Extract the sendToContentScript function body from the bundle.
+  // esbuild preserves the function name.  We look for the span between
+  // "sendToContentScript" and the next top-level function definition.
+  const fnStart = bundle.indexOf('sendToContentScript');
+  const fnEnd   = bundle.indexOf('\nasync function ', fnStart + 1);
+  const fnBody  = fnEnd > fnStart ? bundle.slice(fnStart, fnEnd) : bundle.slice(fnStart, fnStart + 1500);
+
+  assert(
+    !fnBody.includes('console.warn'),
+    'sendToContentScript does NOT call console.warn (would show in Extensions error panel)'
+  );
+  assert(
+    fnBody.includes('Receiving end does not exist'),
+    'sendToContentScript explicitly checks for "Receiving end does not exist" message'
+  );
+}
+
+// ── Test 3c — Content bundle: present and non-empty ───────────────────────────
+
+function testContentBundlePresent() {
+  console.log('\nTest 3c: Content bundle — dist/content.bundle.js exists and non-empty');
+
+  const exists = fs.existsSync(CONTENT_BUNDLE_PATH);
+  assert(exists, 'dist/content.bundle.js exists');
+
+  if (exists) {
+    const size = fs.statSync(CONTENT_BUNDLE_PATH).size;
+    assert(size > 10_000, `content.bundle.js is non-trivial (${size} bytes)`);
+
+    // Spot-check key identifiers (search full bundle — these appear deep in the file)
+    const full = fs.readFileSync(CONTENT_BUNDLE_PATH, 'utf8');
+    assert(full.includes('SelectionOverlay'),
+      'content.bundle.js contains SelectionOverlay (overlay module bundled)');
+    assert(full.includes('onMessage'),
+      'content.bundle.js registers a runtime.onMessage listener');
+  }
+}
+
+// ── Tests 4-10 — Live extension in real Chromium ──────────────────────────────
 
 /**
  * Build a minimal 640×100 data URL (PNG) with white Chinese text on a black
@@ -354,9 +409,102 @@ async function runBrowserTests() {
       `OPEN_SETTINGS returns { ok: true } (got: ${JSON.stringify(settingsReply)})`
     );
 
-    // ── Test 8 — OCR pipeline (first request) ────────────────────────────
+    // ── Test 8 — Content script loads on mock YouTube page ───────────────
+    // Use context.route to intercept https://www.youtube.com/* and serve a
+    // minimal mock page.  Chrome injects the content script into any page
+    // matching the manifest host_permissions pattern — this verifies that
+    // dist/content.bundle.js loads without syntax errors or runtime crashes,
+    // and that the popup silently handles a YouTube tab where the content
+    // script may or may not have fully registered its message listener yet.
 
-    console.log('\nTest 8: OCR pipeline — no fixed errors in response');
+    console.log('\nTest 8: Content script — loads on mock YouTube page without errors');
+
+    // Minimal mock YouTube page: has the video player element the content
+    // script looks for, but no actual YouTube JS/CSS (avoids network dependency).
+    const mockYouTubeHtml = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>YouTube</title></head>
+<body>
+  <div id="movie_player">
+    <video id="video" width="640" height="360" src=""></video>
+  </div>
+</body>
+</html>`;
+
+    await context.route('https://www.youtube.com/**', (route) => {
+      route.fulfill({ status: 200, contentType: 'text/html', body: mockYouTubeHtml });
+    });
+
+    const ytPage = await context.newPage();
+    const ytPageErrors   = [];
+    const ytPageWarnings = [];
+    ytPage.on('pageerror', (e) => ytPageErrors.push(e.message));
+    ytPage.on('console',   (msg) => {
+      if (msg.type() === 'warning') ytPageWarnings.push(msg.text());
+    });
+
+    await ytPage.goto('https://www.youtube.com/watch?v=e2e_test', {
+      waitUntil: 'domcontentloaded',
+      timeout: 15_000,
+    });
+
+    // Wait for document_idle (content script injection point)
+    await ytPage.waitForTimeout(STARTUP_WAIT_MS);
+
+    assert(
+      ytPageErrors.length === 0,
+      ytPageErrors.length === 0
+        ? 'No pageerror events when content script loads on mock YouTube page'
+        : `pageerror on mock YouTube: ${ytPageErrors.join(' | ')}`
+    );
+
+    // The content script must NOT surface any console.warn / console.error
+    // (it shouldn't — its message listener only fires when messages arrive)
+    assert(
+      !ytPageWarnings.some(w => w.toLowerCase().includes('error')),
+      `No error-level warnings from content script on load (got: ${ytPageWarnings.join(', ') || 'none'})`
+    );
+
+    // Open popup while YouTube page is the most-recently-active tab.
+    // bringToFront() makes ytPage the Playwright "active" target, so
+    // chrome.tabs.query({ active:true }) in the popup should see it as active.
+    await ytPage.bringToFront();
+
+    const ytPopupPage    = await context.newPage();
+    const ytPopupErrors  = [];
+    const ytPopupWarnings = [];
+    ytPopupPage.on('pageerror', (e) => ytPopupErrors.push(e.message));
+    ytPopupPage.on('console',  (msg) => {
+      if (msg.type() === 'warning') ytPopupWarnings.push(msg.text());
+    });
+
+    await ytPopupPage.goto(`chrome-extension://${extId}/popup/popup.html`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 10_000,
+    });
+    await ytPopupPage.waitForTimeout(STARTUP_WAIT_MS);
+
+    assert(
+      ytPopupErrors.length === 0,
+      ytPopupErrors.length === 0
+        ? 'No pageerror events when popup opens over mock YouTube tab'
+        : `pageerror: ${ytPopupErrors.join(' | ')}`
+    );
+
+    // The key assertion: "Content script not ready" must NOT appear as a warning
+    // (it was the source of the Extensions panel error that prompted this fix)
+    assert(
+      !ytPopupWarnings.some(w => w.includes('Content script not ready')),
+      `No "Content script not ready" warning when popup opens on YouTube tab (warnings: ${ytPopupWarnings.join(', ') || 'none'})`
+    );
+
+    await ytPage.close();
+    await ytPopupPage.close();
+    await context.unroute('https://www.youtube.com/**');
+
+    // ── Test 9 — OCR pipeline (first request) ────────────────────────────
+
+    console.log('\nTest 9: OCR pipeline — no fixed errors in response');
     console.log('  (first run downloads ~50 MB models; may take several minutes)');
     console.log(`  Timeout: ${OCR_TIMEOUT_MS / 1000}s`);
 
@@ -407,15 +555,15 @@ async function runBrowserTests() {
       }
     }
 
-    // ── Test 9 — No timer collision on rapid retry ────────────────────────
+    // ── Test 10 — No timer collision on rapid retry ───────────────────────
 
-    console.log('\nTest 9: Timer fix — second rapid OCR call, no collision error');
+    console.log('\nTest 10: Timer fix — second rapid OCR call, no collision error');
 
     const prevFailed = failed;
     const test8Passed = failed === prevFailed;
 
     if (!test8Passed) {
-      skip('Second OCR call: no timer collision', 'Test 8 did not succeed');
+      skip('Second OCR call: no timer collision', 'Test 9 did not succeed');
     } else {
       // Models are now cached — second call should be fast
       const ocrResult2 = await popupPage.evaluate(
@@ -467,6 +615,8 @@ async function main() {
   testSourceWasmPathsKeys();
   testJsepFilesAbsent();
   testBundleWasmPathsKeys();
+  testPopupBundleNoWarn();
+  testContentBundlePresent();
 
   // Live browser tests
   try {
