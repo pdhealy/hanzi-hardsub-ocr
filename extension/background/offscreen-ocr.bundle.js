@@ -10695,11 +10695,10 @@ ${u}`, c = n.createShaderModule({ code: d, label: e.name });
   console.log("[YCR:Offscreen] SharedArrayBuffer available:", typeof SharedArrayBuffer !== "undefined");
   console.log("[YCR:Offscreen] crossOriginIsolated:", self.crossOriginIsolated);
   var toTraditional = Converter({ from: "cn", to: "twp" });
-  var CACHE_NAME = "ycr-paddle-models-v1";
   var MODEL_URLS = {
-    detection: "https://unpkg.com/@gutenye/ocr-models@1.4.2/assets/ch_PP-OCRv4_det_infer.onnx",
-    recognition: "https://unpkg.com/@gutenye/ocr-models@1.4.2/assets/ch_PP-OCRv4_rec_infer.onnx",
-    dictionary: "https://unpkg.com/@gutenye/ocr-models@1.4.2/assets/ppocr_keys_v1.txt"
+    detection: chrome.runtime.getURL("libs/models/ch_PP-OCRv4_det_infer.onnx"),
+    recognition: chrome.runtime.getURL("libs/models/ch_PP-OCRv4_rec_infer.onnx"),
+    dictionary: chrome.runtime.getURL("libs/models/ppocr_keys_v1.txt")
   };
   var DET_MEAN = [0.485, 0.456, 0.406];
   var DET_STD = [0.229, 0.224, 0.225];
@@ -10715,15 +10714,9 @@ ${u}`, c = n.createShaderModule({ code: d, label: e.name });
   var dictionary = null;
   var initPromise = null;
   async function loadModel(url) {
-    const cache = await caches.open(CACHE_NAME);
-    let response = await cache.match(url);
-    if (!response) {
-      console.log("[YCR:Offscreen] Downloading model:", url);
-      response = await fetch(url);
-      if (!response.ok) throw new Error(`Failed to fetch model: ${url} (${response.status})`);
-      await cache.put(url, response.clone());
-      console.log("[YCR:Offscreen] Model cached:", url);
-    }
+    console.log("[YCR:Offscreen] Loading bundled model:", url);
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Failed to load bundled model: ${url} (${response.status})`);
     return response.arrayBuffer();
   }
   async function ensureOcr() {

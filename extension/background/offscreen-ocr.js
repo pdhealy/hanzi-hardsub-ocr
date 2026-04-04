@@ -45,11 +45,11 @@ console.log('[YCR:Offscreen] crossOriginIsolated:', self.crossOriginIsolated);
 // Matches poc_2: opencc.Converter({ from: 'cn', to: 'twp' })
 const toTraditional = Converter({ from: 'cn', to: 'twp' });
 
-const CACHE_NAME = 'ycr-paddle-models-v1';
+// Models are pre-bundled in the extension package — no network download required.
 const MODEL_URLS = {
-  detection:  'https://unpkg.com/@gutenye/ocr-models@1.4.2/assets/ch_PP-OCRv4_det_infer.onnx',
-  recognition:'https://unpkg.com/@gutenye/ocr-models@1.4.2/assets/ch_PP-OCRv4_rec_infer.onnx',
-  dictionary: 'https://unpkg.com/@gutenye/ocr-models@1.4.2/assets/ppocr_keys_v1.txt',
+  detection:   chrome.runtime.getURL('libs/models/ch_PP-OCRv4_det_infer.onnx'),
+  recognition: chrome.runtime.getURL('libs/models/ch_PP-OCRv4_rec_infer.onnx'),
+  dictionary:  chrome.runtime.getURL('libs/models/ppocr_keys_v1.txt'),
 };
 
 // ── Detection constants (matching ppu-paddle-ocr DEFAULT_DETECTION_OPTIONS) ───
@@ -73,15 +73,9 @@ let initPromise = null;
 // ── Model loading ──────────────────────────────────────────────────────────────
 
 async function loadModel(url) {
-  const cache = await caches.open(CACHE_NAME);
-  let response = await cache.match(url);
-  if (!response) {
-    console.log('[YCR:Offscreen] Downloading model:', url);
-    response = await fetch(url, { signal: AbortSignal.timeout(120000) });
-    if (!response.ok) throw new Error(`Failed to fetch model: ${url} (${response.status})`);
-    await cache.put(url, response.clone());
-    console.log('[YCR:Offscreen] Model cached:', url);
-  }
+  console.log('[YCR:Offscreen] Loading bundled model:', url);
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Failed to load bundled model: ${url} (${response.status})`);
   return response.arrayBuffer();
 }
 

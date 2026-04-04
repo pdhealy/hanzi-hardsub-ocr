@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "OCR hard-coded Chinese subtitles on YouTube videos",
   "permissions": ["activeTab", "scripting", "storage", "offscreen"],
-  "host_permissions": ["https://www.youtube.com/*", "https://unpkg.com/*"],
+  "host_permissions": ["https://www.youtube.com/*"],
   "background": {
     "service_worker": "background/service-worker.js"
   },
@@ -30,7 +30,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["libs/ort/*"],
+      "resources": ["libs/ort/*", "libs/models/*"],
       "matches": ["<all_urls>"]
     }
   ]
