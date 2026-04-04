@@ -10942,13 +10942,17 @@ ${u}`, c = n.createShaderModule({ code: d, label: e.name });
           return;
         }
         await ensureOcr();
-        const img = new Image();
-        img.src = message.imageDataUrl;
-        await img.decode();
+        console.log("[YCR:Offscreen] Decoding image\u2026");
+        const resp = await fetch(message.imageDataUrl);
+        const blob = await resp.blob();
+        const bitmap = await createImageBitmap(blob);
+        console.log("[YCR:Offscreen] Image decoded:", bitmap.width, "x", bitmap.height);
         const srcCanvas = document.createElement("canvas");
-        srcCanvas.width = img.width;
-        srcCanvas.height = img.height;
-        srcCanvas.getContext("2d").drawImage(img, 0, 0);
+        srcCanvas.width = bitmap.width;
+        srcCanvas.height = bitmap.height;
+        srcCanvas.getContext("2d").drawImage(bitmap, 0, 0);
+        bitmap.close();
+        console.log("[YCR:Offscreen] Running detection\u2026");
         const boxes = await detectTextRegions(srcCanvas);
         console.log("[YCR:Offscreen] Detected", boxes.length, "text region(s)");
         if (boxes.length === 0) {

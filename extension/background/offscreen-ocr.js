@@ -405,16 +405,26 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
       await ensureOcr();
 
-      // Load image data URL into a canvas (the original unmodified image)
-      const img = new Image();
-      img.src = message.imageDataUrl;
-      await img.decode();
+      // Load image data URL into a canvas.
+      //
+      // We intentionally avoid HTMLImageElement + img.decode() here:
+      // chrome.offscreen documents are headless and have no rendering pipeline,
+      // so img.decode() (which waits for "ready to paint") hangs indefinitely.
+      // createImageBitmap() is the correct off-screen API — it decodes via the
+      // image codec without requiring a display context.
+      console.log('[YCR:Offscreen] Decoding image…');
+      const resp   = await fetch(message.imageDataUrl);
+      const blob   = await resp.blob();
+      const bitmap = await createImageBitmap(blob);
+      console.log('[YCR:Offscreen] Image decoded:', bitmap.width, 'x', bitmap.height);
       const srcCanvas = document.createElement('canvas');
-      srcCanvas.width  = img.width;
-      srcCanvas.height = img.height;
-      srcCanvas.getContext('2d').drawImage(img, 0, 0);
+      srcCanvas.width  = bitmap.width;
+      srcCanvas.height = bitmap.height;
+      srcCanvas.getContext('2d').drawImage(bitmap, 0, 0);
+      bitmap.close();
 
       // Step 1: detect text regions in the subtitle area
+      console.log('[YCR:Offscreen] Running detection…');
       const boxes = await detectTextRegions(srcCanvas);
       console.log('[YCR:Offscreen] Detected', boxes.length, 'text region(s)');
 

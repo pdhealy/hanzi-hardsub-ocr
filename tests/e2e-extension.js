@@ -33,9 +33,8 @@
  * Notes:
  *   - Tests 4-8 require a display; this script starts Xvfb automatically if DISPLAY
  *     is not already set (requires Xvfb to be installed).
- *   - Tests 7 & 8 download ~50 MB of ONNX models from unpkg.com on first run.
- *     Subsequent runs use the Cache API inside the extension (fast).
- *   - If the network is unavailable, OCR tests are skipped (not failed).
+ *   - ONNX models are pre-bundled in the extension package (no network download).
+ *     ORT session init takes ~400 ms on first call; subsequent calls are faster.
  */
 
 'use strict';
@@ -55,8 +54,9 @@ const POPUP_BUNDLE_PATH    = path.resolve(__dirname, '../extension/dist/popup.bu
 const CONTENT_BUNDLE_PATH  = path.resolve(__dirname, '../extension/dist/content.bundle.js');
 const ORT_LIBS_PATH        = path.resolve(__dirname, '../extension/libs/ort');
 
-// Model download can take several minutes on a cold cache — be generous.
-const OCR_TIMEOUT_MS    = 5 * 60 * 1000; // 5 minutes
+// Models are pre-bundled in the extension package (no network download).
+// First call initialises ORT sessions (~400 ms); allow generous headroom.
+const OCR_TIMEOUT_MS    = 30_000; // 30 s — ample for local bundle + ORT init
 const STARTUP_WAIT_MS   = 2_000;          // time for SW + offscreen init
 const SW_REGISTER_MS    = 12_000;         // service worker registration timeout
 
@@ -505,7 +505,7 @@ async function runBrowserTests() {
     // ── Test 9 — OCR pipeline (first request) ────────────────────────────
 
     console.log('\nTest 9: OCR pipeline — no fixed errors in response');
-    console.log('  (first run downloads ~50 MB models; may take several minutes)');
+    console.log('  (models pre-bundled — no network download; ORT init ~400 ms on first call)');
     console.log(`  Timeout: ${OCR_TIMEOUT_MS / 1000}s`);
 
     const testImage = await makeTestImageDataUrl(popupPage);
@@ -536,8 +536,8 @@ async function runBrowserTests() {
     const errMsg = (ocrResult?.error ?? '').toLowerCase();
 
     if (errMsg.includes('e2e-timeout') || errMsg.includes('no-response')) {
-      skip('OCR response arrived within timeout', 'timed out — possibly slow network on first model download');
-      skip('Response free of fatal error patterns', 'depends on Test 7 completing');
+      skip('OCR response arrived within timeout', 'timed out — check offscreen doc for errors via CDP');
+      skip('Response free of fatal error patterns', 'depends on Test 9 completing');
     } else {
       for (const pattern of FATAL_ERROR_PATTERNS) {
         assert(
