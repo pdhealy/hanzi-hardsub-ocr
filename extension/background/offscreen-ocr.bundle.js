@@ -10689,7 +10689,8 @@ ${u}`, c = n.createShaderModule({ code: d, label: e.name });
 
   // extension/background/offscreen-ocr.js
   ye.wasm.wasmPaths = {
-    "ort-wasm-simd-threaded.wasm": chrome.runtime.getURL("libs/ort/ort-wasm-simd-threaded.wasm")
+    wasm: chrome.runtime.getURL("libs/ort/ort-wasm-simd-threaded.wasm"),
+    mjs: chrome.runtime.getURL("libs/ort/ort-wasm-simd-threaded.mjs")
   };
   console.log("[YCR:Offscreen] SharedArrayBuffer available:", typeof SharedArrayBuffer !== "undefined");
   console.log("[YCR:Offscreen] crossOriginIsolated:", self.crossOriginIsolated);
@@ -10738,14 +10739,12 @@ ${u}`, c = n.createShaderModule({ code: d, label: e.name });
         ]);
         const dictText = new TextDecoder().decode(dictBuffer);
         dictionary = dictText.trim().split("\n").map((l) => l.trim());
-        console.time("[YCR] det+rec session create");
-        console.time("[YCR] det session create");
+        const t0 = performance.now();
         detSession = await vf.create(detBuffer, { executionProviders: ["wasm"] });
-        console.timeEnd("[YCR] det session create");
-        console.time("[YCR] rec session create");
+        const t1 = performance.now();
         recSession = await vf.create(recBuffer, { executionProviders: ["wasm"] });
-        console.timeEnd("[YCR] rec session create");
-        console.timeEnd("[YCR] det+rec session create");
+        const t2 = performance.now();
+        console.log(`[YCR] det session: ${(t1 - t0).toFixed(0)}ms  rec session: ${(t2 - t1).toFixed(0)}ms  total: ${(t2 - t0).toFixed(0)}ms`);
         console.log("[YCR:Offscreen] PaddleOCR ready. Dict size:", dictionary.length);
       } catch (err) {
         console.error("[YCR:Offscreen] Init failed:", err);

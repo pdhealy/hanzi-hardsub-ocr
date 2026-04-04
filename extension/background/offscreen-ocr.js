@@ -21,13 +21,19 @@
 import { Converter } from 'opencc-js';
 import * as ort from 'onnxruntime-web';
 
-// Point ONNX Runtime WASM loader to the specific non-JSEP WASM file.
-// Using an explicit file map (not a directory string) prevents ORT from
-// discovering and loading the 24MB JSEP variant (WebGPU/WebNN), which
-// would hang in an offscreen document that lacks WebGPU and cross-origin
-// isolation.
+// Point ONNX Runtime WASM loader to the non-JSEP WASM and its JS module factory.
+//
+// ORT 1.24.x reads wasmPaths with SHORT keys: { wasm, mjs } — NOT full filenames.
+// Providing both keys:
+//   - Marks isWasmOverridden=true so ORT skips the embedded-module path that
+//     throws "cannot determine the script source URL" when import.meta.url is
+//     unavailable (esbuild IIFE replaces import.meta with `{}`).
+//   - Directs ORT to dynamically import ort-wasm-simd-threaded.mjs (non-JSEP
+//     factory) rather than the JSEP factory embedded in the bundle, preventing
+//     the 24 MB jsep.wasm from being loaded.
 ort.env.wasm.wasmPaths = {
-  'ort-wasm-simd-threaded.wasm': chrome.runtime.getURL('libs/ort/ort-wasm-simd-threaded.wasm'),
+  wasm: chrome.runtime.getURL('libs/ort/ort-wasm-simd-threaded.wasm'),
+  mjs:  chrome.runtime.getURL('libs/ort/ort-wasm-simd-threaded.mjs'),
 };
 
 // Diagnostic: log availability of SharedArrayBuffer and cross-origin isolation.
@@ -96,15 +102,12 @@ async function ensureOcr() {
       const dictText = new TextDecoder().decode(dictBuffer);
       dictionary = dictText.trim().split('\n').map(l => l.trim());
 
-      console.time('[YCR] det+rec session create');
-      console.time('[YCR] det session create');
+      const t0 = performance.now();
       detSession = await ort.InferenceSession.create(detBuffer, { executionProviders: ['wasm'] });
-      console.timeEnd('[YCR] det session create');
-
-      console.time('[YCR] rec session create');
+      const t1 = performance.now();
       recSession = await ort.InferenceSession.create(recBuffer, { executionProviders: ['wasm'] });
-      console.timeEnd('[YCR] rec session create');
-      console.timeEnd('[YCR] det+rec session create');
+      const t2 = performance.now();
+      console.log(`[YCR] det session: ${(t1 - t0).toFixed(0)}ms  rec session: ${(t2 - t1).toFixed(0)}ms  total: ${(t2 - t0).toFixed(0)}ms`);
 
       console.log('[YCR:Offscreen] PaddleOCR ready. Dict size:', dictionary.length);
     } catch (err) {
