@@ -77,7 +77,7 @@ async function loadModel(url) {
   let response = await cache.match(url);
   if (!response) {
     console.log('[YCR:Offscreen] Downloading model:', url);
-    response = await fetch(url);
+    response = await fetch(url, { signal: AbortSignal.timeout(120000) });
     if (!response.ok) throw new Error(`Failed to fetch model: ${url} (${response.status})`);
     await cache.put(url, response.clone());
     console.log('[YCR:Offscreen] Model cached:', url);

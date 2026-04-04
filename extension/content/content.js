@@ -15,8 +15,9 @@ let isLooping = false;
 let isTicking = false;
 let lastRecognizedText = '';
 let scanCount = 0;
-// First call: download det (~4.9MB) + rec (~12MB) + dict + create 2 ONNX sessions
-const OCR_INIT_TIMEOUT_MS = 120000;
+// First call: download det (~4.9MB) + rec (~12MB) + dict + create 2 ONNX sessions.
+// 5 minutes: slow connections can take 2-3 min to download ~17 MB from unpkg.com.
+const OCR_INIT_TIMEOUT_MS = 300000;
 // Subsequent calls: offscreen doc may be unloaded between scans, forcing re-init of
 // 2 ONNX sessions from Cache Storage (~20-30s). Keep well above that.
 const OCR_SCAN_TIMEOUT_MS = 60000;
