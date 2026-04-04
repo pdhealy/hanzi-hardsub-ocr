@@ -1,6 +1,20 @@
 #!/usr/bin/env bash
 set -u
 
+# Fix cache directory ownership.
+#
+# Docker volume mounts (playwright-browser-cache-*, chrome-devtools-mcp) are
+# created with the mount-point directory owned by root, even though the
+# container runs as the 'node' user.  Without this fix, 'npx playwright install'
+# and the chrome-devtools MCP server both fail with EACCES when trying to write
+# to /home/node/.cache.
+#
+# This must run BEFORE playwright install and BEFORE any tool that writes to
+# ~/.cache (e.g. chrome-devtools-mcp which creates ~/.cache/chrome-devtools-mcp).
+echo "Fixing ~/.cache ownership for node user..."
+sudo mkdir -p /home/node/.cache
+sudo chown -R node:node /home/node/.cache
+
 # Install Playwright's Chromium browser into the persisted volume mount
 # (~/.cache/ms-playwright). The volume survives container rebuilds so this
 # only downloads (~300 MB) once. Subsequent starts are instant.

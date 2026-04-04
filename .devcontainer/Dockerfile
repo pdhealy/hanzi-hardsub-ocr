@@ -44,9 +44,17 @@ RUN SNIPPET="export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhisto
 # Set `DEVCONTAINER` environment variable to help with orientation
 ENV DEVCONTAINER=true
 
-# Create workspace and config directories and set permissions
-RUN mkdir -p /workspace /home/node/.claude && \
-  chown -R node:node /workspace /home/node/.claude
+# Create workspace, config, and cache directories and set permissions.
+# ~/.cache/ms-playwright is the Playwright browser cache (mounted as a named
+# Docker volume in devcontainer.json). Pre-creating it here owned by 'node'
+# ensures it is writable when no volume is mounted (local/non-devcontainer use).
+# When the volume IS mounted, post-create.sh re-applies chown after Docker
+# creates the mount point as root.
+# ~/.cache/chrome-devtools-mcp is written by the MCP server at runtime.
+RUN mkdir -p /workspace /home/node/.claude \
+      /home/node/.cache/ms-playwright \
+      /home/node/.cache/chrome-devtools-mcp && \
+  chown -R node:node /workspace /home/node/.claude /home/node/.cache
 
 WORKDIR /workspace
 
