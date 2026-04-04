@@ -10688,7 +10688,11 @@ ${u}`, c = n.createShaderModule({ code: d, label: e.name });
   Object.defineProperty(ye.versions, "web", { value: ss, enumerable: true });
 
   // extension/background/offscreen-ocr.js
-  ye.wasm.wasmPaths = chrome.runtime.getURL("libs/ort/");
+  ye.wasm.wasmPaths = {
+    "ort-wasm-simd-threaded.wasm": chrome.runtime.getURL("libs/ort/ort-wasm-simd-threaded.wasm")
+  };
+  console.log("[YCR:Offscreen] SharedArrayBuffer available:", typeof SharedArrayBuffer !== "undefined");
+  console.log("[YCR:Offscreen] crossOriginIsolated:", self.crossOriginIsolated);
   var toTraditional = Converter({ from: "cn", to: "twp" });
   var CACHE_NAME = "ycr-paddle-models-v1";
   var MODEL_URLS = {
@@ -10734,10 +10738,14 @@ ${u}`, c = n.createShaderModule({ code: d, label: e.name });
         ]);
         const dictText = new TextDecoder().decode(dictBuffer);
         dictionary = dictText.trim().split("\n").map((l) => l.trim());
-        [detSession, recSession] = await Promise.all([
-          vf.create(detBuffer, { executionProviders: ["wasm"] }),
-          vf.create(recBuffer, { executionProviders: ["wasm"] })
-        ]);
+        console.time("[YCR] det+rec session create");
+        console.time("[YCR] det session create");
+        detSession = await vf.create(detBuffer, { executionProviders: ["wasm"] });
+        console.timeEnd("[YCR] det session create");
+        console.time("[YCR] rec session create");
+        recSession = await vf.create(recBuffer, { executionProviders: ["wasm"] });
+        console.timeEnd("[YCR] rec session create");
+        console.timeEnd("[YCR] det+rec session create");
         console.log("[YCR:Offscreen] PaddleOCR ready. Dict size:", dictionary.length);
       } catch (err) {
         console.error("[YCR:Offscreen] Init failed:", err);

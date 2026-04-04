@@ -66,14 +66,11 @@ async function build() {
       'node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.mjs',
       'extension/libs/ort/ort-wasm-simd-threaded.mjs'
     );
-    copyFile(
-      'node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.mjs',
-      'extension/libs/ort/ort-wasm-simd-threaded.jsep.mjs'
-    );
-    copyFile(
-      'node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.wasm',
-      'extension/libs/ort/ort-wasm-simd-threaded.jsep.wasm'
-    );
+    // JSEP variants (WebGPU/WebNN) intentionally NOT copied.
+    // The offscreen document sets an explicit wasmPaths map that points only to
+    // the non-JSEP WASM.  Having the 24MB jsep.wasm present on disk caused ORT
+    // to attempt JSEP initialisation in the offscreen context, which has no
+    // WebGPU support and no cross-origin isolation — resulting in a >120s hang.
 
     console.log('Build complete.');
   }

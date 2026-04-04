@@ -21,8 +21,19 @@
 import { Converter } from 'opencc-js';
 import * as ort from 'onnxruntime-web';
 
-// Point ONNX Runtime WASM loader to locally bundled files
-ort.env.wasm.wasmPaths = chrome.runtime.getURL('libs/ort/');
+// Point ONNX Runtime WASM loader to the specific non-JSEP WASM file.
+// Using an explicit file map (not a directory string) prevents ORT from
+// discovering and loading the 24MB JSEP variant (WebGPU/WebNN), which
+// would hang in an offscreen document that lacks WebGPU and cross-origin
+// isolation.
+ort.env.wasm.wasmPaths = {
+  'ort-wasm-simd-threaded.wasm': chrome.runtime.getURL('libs/ort/ort-wasm-simd-threaded.wasm'),
+};
+
+// Diagnostic: log availability of SharedArrayBuffer and cross-origin isolation.
+// These affect which threading path ORT chooses; useful for debugging timeouts.
+console.log('[YCR:Offscreen] SharedArrayBuffer available:', typeof SharedArrayBuffer !== 'undefined');
+console.log('[YCR:Offscreen] crossOriginIsolated:', self.crossOriginIsolated);
 
 // OpenCC: Simplified Chinese → Traditional Chinese (Taiwan Phrases)
 // Matches poc_2: opencc.Converter({ from: 'cn', to: 'twp' })
@@ -85,10 +96,15 @@ async function ensureOcr() {
       const dictText = new TextDecoder().decode(dictBuffer);
       dictionary = dictText.trim().split('\n').map(l => l.trim());
 
-      [detSession, recSession] = await Promise.all([
-        ort.InferenceSession.create(detBuffer, { executionProviders: ['wasm'] }),
-        ort.InferenceSession.create(recBuffer, { executionProviders: ['wasm'] }),
-      ]);
+      console.time('[YCR] det+rec session create');
+      console.time('[YCR] det session create');
+      detSession = await ort.InferenceSession.create(detBuffer, { executionProviders: ['wasm'] });
+      console.timeEnd('[YCR] det session create');
+
+      console.time('[YCR] rec session create');
+      recSession = await ort.InferenceSession.create(recBuffer, { executionProviders: ['wasm'] });
+      console.timeEnd('[YCR] rec session create');
+      console.timeEnd('[YCR] det+rec session create');
 
       console.log('[YCR:Offscreen] PaddleOCR ready. Dict size:', dictionary.length);
     } catch (err) {
