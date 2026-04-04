@@ -82,7 +82,18 @@ for domain in \
     "files.pythonhosted.org" \
     "paddlepaddle.org.cn" \
     "paddle-model-ecology.bj.bcebos.com" \
-    "bj.bcebos.com"; do
+    "bj.bcebos.com" \
+    "www.youtube.com" \
+    "youtube.com" \
+    "i.ytimg.com" \
+    "yt3.ggpht.com" \
+    "yt3.googleusercontent.com" \
+    "googlevideo.com" \
+    "accounts.google.com" \
+    "www.google.com" \
+    "gstatic.com" \
+    "www.googleapis.com" \
+    "static.doubleclick.net"; do
     echo "Resolving $domain..."
     ips=$(dig +noall +answer A "$domain" | awk '$4 == "A" {print $5}')
     if [ -z "$ips" ]; then
@@ -118,6 +129,14 @@ echo "Host network detected as: $HOST_NETWORK"
 # Set up remaining iptables rules
 iptables -A INPUT -s "$HOST_NETWORK" -j ACCEPT
 iptables -A OUTPUT -d "$HOST_NETWORK" -j ACCEPT
+
+# Allow TCP to Chrome Remote Debugging Protocol on the Docker host.
+# The host's 127.0.0.1:9222 is reachable inside the container as
+# host.docker.internal:9222 (resolved to HOST_IP by Docker).
+# The HOST_NETWORK rule above already covers this, but we add an
+# explicit targeted rule for clarity and forward-compatibility.
+iptables -A OUTPUT -p tcp -d "$HOST_IP" --dport 9222 -j ACCEPT
+iptables -A INPUT  -p tcp -s "$HOST_IP" --sport 9222 -m state --state ESTABLISHED -j ACCEPT
 
 # Set default policies to DROP first
 iptables -P INPUT DROP

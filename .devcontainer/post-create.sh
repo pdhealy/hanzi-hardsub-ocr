@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 set -u
 
+# Install Playwright's Chromium browser into the persisted volume mount
+# (~/.cache/ms-playwright). The volume survives container rebuilds so this
+# only downloads (~300 MB) once. Subsequent starts are instant.
+echo "Installing Playwright Chromium browser..."
+if npx --yes playwright install chromium 2>&1; then
+  echo "Playwright Chromium installed successfully"
+else
+  echo "Warning: Playwright browser install failed; E2E tests may not run"
+fi
+
 if [[ ! -f package.json ]]; then
   echo "No package.json found in /workspace; skipping npm install"
   exit 0

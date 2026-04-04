@@ -11,7 +11,8 @@
   },
   "runArgs": [
     "--cap-add=NET_ADMIN",
-    "--cap-add=NET_RAW"
+    "--cap-add=NET_RAW",
+    "--add-host=host.docker.internal:host-gateway"
   ],
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
   "workspaceFolder": "/workspace",
@@ -22,6 +23,7 @@
   "mounts": [
     "source=claude-code-bashhistory-${devcontainerId},target=/commandhistory,type=volume",
     "source=claude-code-config-${devcontainerId},target=/home/node/.claude,type=volume",
+    "source=playwright-browser-cache-${devcontainerId},target=/home/node/.cache/ms-playwright,type=volume",
     "source=/run/host-services/ssh-auth.sock,target=/run/host-services/ssh-auth.sock,type=bind,consistency=delegated"
   ],
   "remoteEnv": {
