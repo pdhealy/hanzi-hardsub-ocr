@@ -10692,6 +10692,7 @@ ${u}`, c = n.createShaderModule({ code: d, label: e.name });
     wasm: chrome.runtime.getURL("libs/ort/ort-wasm-simd-threaded.wasm"),
     mjs: chrome.runtime.getURL("libs/ort/ort-wasm-simd-threaded.mjs")
   };
+  ye.wasm.numThreads = 1;
   console.log("[YCR:Offscreen] SharedArrayBuffer available:", typeof SharedArrayBuffer !== "undefined");
   console.log("[YCR:Offscreen] crossOriginIsolated:", self.crossOriginIsolated);
   var toTraditional = Converter({ from: "cn", to: "twp" });
@@ -10730,11 +10731,15 @@ ${u}`, c = n.createShaderModule({ code: d, label: e.name });
           loadModel(MODEL_URLS.recognition),
           loadModel(MODEL_URLS.dictionary)
         ]);
+        console.log("[YCR:Offscreen] Model buffers fetched:", detBuffer.byteLength, recBuffer.byteLength, dictBuffer.byteLength);
         const dictText = new TextDecoder().decode(dictBuffer);
         dictionary = dictText.trim().split("\n").map((l) => l.trim());
+        console.log("[YCR:Offscreen] Dictionary decoded. Dict size:", dictionary.length);
         const t0 = performance.now();
+        console.log("[YCR:Offscreen] Creating detection InferenceSession...");
         detSession = await vf.create(detBuffer, { executionProviders: ["wasm"] });
         const t1 = performance.now();
+        console.log("[YCR:Offscreen] Detection session created in", (t1 - t0).toFixed(0), "ms. Creating recognition session...");
         recSession = await vf.create(recBuffer, { executionProviders: ["wasm"] });
         const t2 = performance.now();
         console.log(`[YCR] det session: ${(t1 - t0).toFixed(0)}ms  rec session: ${(t2 - t1).toFixed(0)}ms  total: ${(t2 - t0).toFixed(0)}ms`);

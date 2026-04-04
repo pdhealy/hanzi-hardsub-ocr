@@ -36,6 +36,21 @@ ort.env.wasm.wasmPaths = {
   mjs:  chrome.runtime.getURL('libs/ort/ort-wasm-simd-threaded.mjs'),
 };
 
+// Force single-threaded WASM execution.
+//
+// The threaded WASM binary spawns Web Workers that communicate via
+// SharedArrayBuffer.  In headless Chromium (used by the chrome-devtools MCP
+// and Playwright CI) the offscreen document's crossOriginIsolated flag is
+// false, which causes the ORT thread-worker handshake to deadlock: workers
+// are created but Atomics.wait() blocks indefinitely waiting for the main
+// thread to signal, and InferenceSession.create() never resolves.
+//
+// Setting numThreads = 1 tells ORT to skip worker spawning entirely and run
+// inference on the single main thread.  Subtitle-frame images are small
+// (typically < 640×100 px) so single-threaded inference is fast enough
+// (~100-300 ms per frame on modern hardware).
+ort.env.wasm.numThreads = 1;
+
 // Diagnostic: log availability of SharedArrayBuffer and cross-origin isolation.
 // These affect which threading path ORT chooses; useful for debugging timeouts.
 console.log('[YCR:Offscreen] SharedArrayBuffer available:', typeof SharedArrayBuffer !== 'undefined');
@@ -91,14 +106,18 @@ async function ensureOcr() {
         loadModel(MODEL_URLS.recognition),
         loadModel(MODEL_URLS.dictionary),
       ]);
+      console.log('[YCR:Offscreen] Model buffers fetched:', detBuffer.byteLength, recBuffer.byteLength, dictBuffer.byteLength);
 
       // One character per line; CTC blank = last index (numClasses - 1 = dictLen)
       const dictText = new TextDecoder().decode(dictBuffer);
       dictionary = dictText.trim().split('\n').map(l => l.trim());
+      console.log('[YCR:Offscreen] Dictionary decoded. Dict size:', dictionary.length);
 
       const t0 = performance.now();
+      console.log('[YCR:Offscreen] Creating detection InferenceSession...');
       detSession = await ort.InferenceSession.create(detBuffer, { executionProviders: ['wasm'] });
       const t1 = performance.now();
+      console.log('[YCR:Offscreen] Detection session created in', (t1 - t0).toFixed(0), 'ms. Creating recognition session...');
       recSession = await ort.InferenceSession.create(recBuffer, { executionProviders: ['wasm'] });
       const t2 = performance.now();
       console.log(`[YCR] det session: ${(t1 - t0).toFixed(0)}ms  rec session: ${(t2 - t1).toFixed(0)}ms  total: ${(t2 - t0).toFixed(0)}ms`);
