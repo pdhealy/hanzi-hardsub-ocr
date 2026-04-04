@@ -4,9 +4,15 @@
   var btnRecognize = document.getElementById("btn-recognize");
   var statusDot = document.getElementById("status-dot");
   var statusLabel = document.getElementById("status-label");
-  async function sendToContentScript(message) {
+  async function getActiveYouTubeTab() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id) return;
+    if (!tab?.id) return null;
+    if (!/^https:\/\/www\.youtube\.com\//.test(tab.url ?? "")) return null;
+    return tab;
+  }
+  async function sendToContentScript(message) {
+    const tab = await getActiveYouTubeTab();
+    if (!tab) return;
     try {
       return await chrome.tabs.sendMessage(tab.id, message);
     } catch (err) {
@@ -21,6 +27,8 @@
     } else if (state === "processing") {
       statusDot.classList.add("processing");
       statusLabel.textContent = "Recognizing...";
+    } else if (state === "not-youtube") {
+      statusLabel.textContent = "Open YouTube to use";
     } else {
       statusLabel.textContent = "Inactive";
     }
@@ -47,6 +55,12 @@
     }
   });
   (async () => {
+    const tab = await getActiveYouTubeTab();
+    if (!tab) {
+      setStatus("not-youtube");
+      btnDraw.disabled = true;
+      return;
+    }
     const response = await sendToContentScript({ action: "GET_STATUS" });
     if (response?.boxDrawn) {
       setStatus("ready");

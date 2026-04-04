@@ -6,23 +6,37 @@ const statusDot = document.getElementById('status-dot');
 const statusLabel = document.getElementById('status-label');
 
 /**
+ * Return the active tab only if it is a YouTube page.
+ * The content script is injected exclusively on https://www.youtube.com/*,
+ * so messaging any other tab always throws "Receiving end does not exist".
+ */
+async function getActiveYouTubeTab() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) return null;
+  if (!/^https:\/\/www\.youtube\.com\//.test(tab.url ?? '')) return null;
+  return tab;
+}
+
+/**
  * Send a message to the content script in the active YouTube tab.
+ * Returns undefined (no error) when not on a YouTube page.
  * @param {Object} message
- * @returns {Promise<any>} response from content script, or undefined on error
+ * @returns {Promise<any>} response from content script, or undefined
  */
 async function sendToContentScript(message) {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.id) return;
+  const tab = await getActiveYouTubeTab();
+  if (!tab) return; // not a YouTube tab — content script is not present
   try {
     return await chrome.tabs.sendMessage(tab.id, message);
   } catch (err) {
+    // Content script may still be initializing on this YouTube page
     console.warn('Content script not ready:', err);
   }
 }
 
 /**
  * Update the status indicator in the popup.
- * @param {'inactive'|'ready'|'processing'} state
+ * @param {'inactive'|'not-youtube'|'ready'|'processing'} state
  */
 function setStatus(state) {
   statusDot.className = 'status-dot';
@@ -32,6 +46,8 @@ function setStatus(state) {
   } else if (state === 'processing') {
     statusDot.classList.add('processing');
     statusLabel.textContent = 'Recognizing...';
+  } else if (state === 'not-youtube') {
+    statusLabel.textContent = 'Open YouTube to use';
   } else {
     statusLabel.textContent = 'Inactive';
   }
@@ -62,8 +78,16 @@ btnRecognize.addEventListener('click', async () => {
   }
 });
 
-// On popup open, check if a box is already drawn and sync loop state (D-12)
+// On popup open: check current tab and sync state (D-12)
 (async () => {
+  const tab = await getActiveYouTubeTab();
+  if (!tab) {
+    // Not on YouTube — disable buttons and show a helpful message
+    setStatus('not-youtube');
+    btnDraw.disabled = true;
+    return;
+  }
+
   const response = await sendToContentScript({ action: 'GET_STATUS' });
   if (response?.boxDrawn) {
     setStatus('ready');

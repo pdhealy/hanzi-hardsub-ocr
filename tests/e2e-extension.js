@@ -18,9 +18,11 @@
  *   3. Bundle integrity  — bundle preserves short keys, no full-filename key pattern
  *   4. Extension load    — service worker registers, URL matches expected pattern
  *   5. No startup errors — popup page loads without pageerror events
- *   6. SW connectivity   — OPEN_SETTINGS action returns { ok: true }
- *   7. OCR pipeline      — OCR_RECOGNIZE_IMAGE response free of the errors we fixed
- *   8. Timer collision   — two rapid OCR calls both complete without timer errors
+ *   6. Non-YouTube guard — popup on non-YouTube tab: no "Receiving end" error,
+ *                          status label shows "Open YouTube to use", buttons disabled
+ *   7. SW connectivity   — OPEN_SETTINGS action returns { ok: true }
+ *   8. OCR pipeline      — OCR_RECOGNIZE_IMAGE response free of the errors we fixed
+ *   9. Timer collision   — two rapid OCR calls both complete without timer errors
  *
  * Run:
  *   node tests/e2e-extension.js
@@ -277,9 +279,67 @@ async function runBrowserTests() {
         : `pageerror events: ${pageErrors.join(' | ')}`
     );
 
-    // ── Test 6 — Service worker connectivity ─────────────────────────────
+    // ── Test 6 — Non-YouTube guard ────────────────────────────────────────
+    // The popup opens on a chrome-extension:// page (not YouTube).
+    // sendToContentScript should return silently and the UI should reflect
+    // "Open YouTube to use" without throwing "Receiving end does not exist".
 
-    console.log('\nTest 6: SW connectivity — OPEN_SETTINGS action');
+    console.log('\nTest 6: Non-YouTube guard — popup silent, buttons disabled');
+
+    const consoleWarnings = [];
+    popupPage.on('console', (msg) => {
+      if (msg.type() === 'warning') consoleWarnings.push(msg.text());
+    });
+
+    // Re-run the popup init by navigating to it again (fresh load)
+    const nonYtPage = await context.newPage();
+    const nonYtErrors = [];
+    const nonYtWarnings = [];
+    nonYtPage.on('pageerror', (e) => nonYtErrors.push(e.message));
+    nonYtPage.on('console', (msg) => {
+      if (msg.type() === 'warning') nonYtWarnings.push(msg.text());
+    });
+
+    // Navigate to the popup from a page whose URL is NOT youtube.com.
+    // The popup's getActiveYouTubeTab() will check the active tab URL.
+    // We open the popup directly — the "active tab" context will be the
+    // chrome-extension:// URL itself, which does not match the YouTube pattern.
+    await nonYtPage.goto(`chrome-extension://${extId}/popup/popup.html`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 10_000,
+    });
+    await nonYtPage.waitForTimeout(STARTUP_WAIT_MS);
+
+    // No "Receiving end does not exist" in page errors
+    assert(
+      nonYtErrors.length === 0,
+      nonYtErrors.length === 0
+        ? 'No pageerror events on non-YouTube popup open'
+        : `pageerror on non-YouTube popup: ${nonYtErrors.join(' | ')}`
+    );
+
+    // No "Content script not ready" warning
+    assert(
+      !nonYtWarnings.some(w => w.includes('Content script not ready')),
+      `No "Content script not ready" warning on non-YouTube tab (warnings: ${nonYtWarnings.join(', ') || 'none'})`
+    );
+
+    // Status label updated to "Open YouTube to use"
+    const statusText = await nonYtPage.$eval('#status-label', el => el.textContent);
+    assert(
+      statusText === 'Open YouTube to use',
+      `Status label shows "Open YouTube to use" (got: "${statusText}")`
+    );
+
+    // Draw button disabled on non-YouTube tab
+    const btnDrawDisabled = await nonYtPage.$eval('#btn-draw', el => el.disabled);
+    assert(btnDrawDisabled, 'Draw button is disabled on non-YouTube tab');
+
+    await nonYtPage.close();
+
+    // ── Test 7 — Service worker connectivity ─────────────────────────────
+
+    console.log('\nTest 7: SW connectivity — OPEN_SETTINGS action');
 
     const settingsReply = await popupPage.evaluate(() =>
       new Promise((resolve) => {
@@ -294,9 +354,9 @@ async function runBrowserTests() {
       `OPEN_SETTINGS returns { ok: true } (got: ${JSON.stringify(settingsReply)})`
     );
 
-    // ── Test 7 — OCR pipeline (first request) ────────────────────────────
+    // ── Test 8 — OCR pipeline (first request) ────────────────────────────
 
-    console.log('\nTest 7: OCR pipeline — no fixed errors in response');
+    console.log('\nTest 8: OCR pipeline — no fixed errors in response');
     console.log('  (first run downloads ~50 MB models; may take several minutes)');
     console.log(`  Timeout: ${OCR_TIMEOUT_MS / 1000}s`);
 
@@ -347,15 +407,15 @@ async function runBrowserTests() {
       }
     }
 
-    // ── Test 8 — No timer collision on rapid retry ────────────────────────
+    // ── Test 9 — No timer collision on rapid retry ────────────────────────
 
-    console.log('\nTest 8: Timer fix — second rapid OCR call, no collision error');
+    console.log('\nTest 9: Timer fix — second rapid OCR call, no collision error');
 
     const prevFailed = failed;
-    const test7Passed = failed === prevFailed;
+    const test8Passed = failed === prevFailed;
 
-    if (!test7Passed) {
-      skip('Second OCR call: no timer collision', 'Test 7 did not succeed');
+    if (!test8Passed) {
+      skip('Second OCR call: no timer collision', 'Test 8 did not succeed');
     } else {
       // Models are now cached — second call should be fast
       const ocrResult2 = await popupPage.evaluate(
