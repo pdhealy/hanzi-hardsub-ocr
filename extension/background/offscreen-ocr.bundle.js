@@ -10701,10 +10701,8 @@ ${u}`, c = n.createShaderModule({ code: d, label: e.name });
     recognition: chrome.runtime.getURL("libs/models/ch_PP-OCRv4_rec_infer.onnx"),
     dictionary: chrome.runtime.getURL("libs/models/ppocr_keys_v1.txt")
   };
-  var DET_MEAN = [0.485, 0.456, 0.406];
-  var DET_STD = [0.229, 0.224, 0.225];
   var DET_MAX_SIDE = 640;
-  var DET_THRESHOLD = 0.3;
+  var DET_THRESHOLD = 0.03;
   var DET_MIN_AREA = 25;
   var DET_PAD_V = 0.4;
   var DET_PAD_H = 0.6;
@@ -10771,9 +10769,9 @@ ${u}`, c = n.createShaderModule({ code: d, label: e.name });
     const HW = modelH * modelW;
     const tensor = new Float32Array(3 * HW);
     for (let i = 0; i < HW; i++) {
-      for (let c = 0; c < 3; c++) {
-        tensor[c * HW + i] = (data[i * 4 + c] / 255 - DET_MEAN[c]) / DET_STD[c];
-      }
+      tensor[i] = data[i * 4 + 2] / 255;
+      tensor[HW + i] = data[i * 4 + 1] / 255;
+      tensor[HW * 2 + i] = data[i * 4] / 255;
     }
     return { tensor, modelW, modelH, resizeRatio: ratio, origW, origH };
   }
@@ -10881,14 +10879,14 @@ ${u}`, c = n.createShaderModule({ code: d, label: e.name });
     const HW = REC_TARGET_H * newW;
     const tensor = new Float32Array(3 * HW);
     for (let i = 0; i < HW; i++) {
-      tensor[i] = data[i * 4] / 127.5 - 1;
-      tensor[HW + i] = data[i * 4 + 1] / 127.5 - 1;
-      tensor[HW * 2 + i] = data[i * 4 + 2] / 127.5 - 1;
+      tensor[i] = data[i * 4 + 2] / 255;
+      tensor[HW + i] = data[i * 4 + 1] / 255;
+      tensor[HW * 2 + i] = data[i * 4] / 255;
     }
     return { tensor, width: newW };
   }
   function ctcDecode(logits, seqLen, numClasses) {
-    const blank = numClasses - 1;
+    const BLANK_INDEX = 0;
     let prevIdx = -1;
     let result = "";
     for (let t = 0; t < seqLen; t++) {
@@ -10900,8 +10898,11 @@ ${u}`, c = n.createShaderModule({ code: d, label: e.name });
           maxIdx = c;
         }
       }
-      if (maxIdx !== blank && maxIdx !== prevIdx) {
-        result += dictionary[maxIdx] || "";
+      if (maxIdx !== BLANK_INDEX && maxIdx !== prevIdx) {
+        const char = dictionary[maxIdx - 1];
+        if (char && char !== "<unk>") {
+          result += char;
+        }
       }
       prevIdx = maxIdx;
     }
@@ -10947,13 +10948,13 @@ ${u}`, c = n.createShaderModule({ code: d, label: e.name });
         const blob = await resp.blob();
         const bitmap = await createImageBitmap(blob);
         console.log("[YCR:Offscreen] Image decoded:", bitmap.width, "x", bitmap.height);
-        const srcCanvas = document.createElement("canvas");
-        srcCanvas.width = bitmap.width;
-        srcCanvas.height = bitmap.height;
-        srcCanvas.getContext("2d").drawImage(bitmap, 0, 0);
+        const rawCanvas = document.createElement("canvas");
+        rawCanvas.width = bitmap.width;
+        rawCanvas.height = bitmap.height;
+        rawCanvas.getContext("2d").drawImage(bitmap, 0, 0);
         bitmap.close();
         console.log("[YCR:Offscreen] Running detection\u2026");
-        const boxes = await detectTextRegions(srcCanvas);
+        const boxes = await detectTextRegions(rawCanvas);
         console.log("[YCR:Offscreen] Detected", boxes.length, "text region(s)");
         if (boxes.length === 0) {
           sendResponse({ ok: true, text: "", confidence: 0 });
@@ -10961,7 +10962,7 @@ ${u}`, c = n.createShaderModule({ code: d, label: e.name });
         }
         const parts = [];
         for (const box of boxes) {
-          const rawText = await recognizeCrop(srcCanvas, box);
+          const rawText = await recognizeCrop(rawCanvas, box);
           if (rawText) parts.push(rawText);
         }
         const text = toTraditional(parts.join(""));

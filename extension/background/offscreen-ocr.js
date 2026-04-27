@@ -67,11 +67,9 @@ const MODEL_URLS = {
   dictionary:  chrome.runtime.getURL('libs/models/ppocr_keys_v1.txt'),
 };
 
-// ── Detection constants (matching ppu-paddle-ocr DEFAULT_DETECTION_OPTIONS) ───
-const DET_MEAN       = [0.485, 0.456, 0.406];
-const DET_STD        = [0.229, 0.224, 0.225];
+// ── Detection constants (matching @gutenye/ocr-node) ───
 const DET_MAX_SIDE   = 640;   // resize longest side to at most this
-const DET_THRESHOLD  = 0.3;   // DBNet probability threshold for binary map
+const DET_THRESHOLD  = 0.03;  // DBNet probability threshold for binary map
 const DET_MIN_AREA   = 25;    // minimum blob area in detection-scaled coordinates
 const DET_PAD_V      = 0.4;   // vertical padding factor around each detected rect
 const DET_PAD_H      = 0.6;   // horizontal padding factor (based on box height, per ppu-paddle-ocr)
@@ -170,12 +168,13 @@ function preprocessForDetection(srcCanvas) {
   const { data } = canvas.getContext('2d').getImageData(0, 0, modelW, modelH);
 
   // Step 3: RGBA pixels → NCHW Float32 [1, 3, modelH, modelW]
+  // @gutenye/ocr-node uses BGR order and no mean/std normalisation for ch_PP-OCRv4
   const HW = modelH * modelW;
   const tensor = new Float32Array(3 * HW);
   for (let i = 0; i < HW; i++) {
-    for (let c = 0; c < 3; c++) {
-      tensor[c * HW + i] = (data[i * 4 + c] / 255 - DET_MEAN[c]) / DET_STD[c];
-    }
+    tensor[i]          = data[i * 4 + 2] / 255; // B
+    tensor[HW + i]     = data[i * 4 + 1] / 255; // G
+    tensor[HW * 2 + i] = data[i * 4]     / 255; // R
   }
 
   return { tensor, modelW, modelH, resizeRatio: ratio, origW, origH };
@@ -332,9 +331,11 @@ function preprocessForRecognition(cropCanvas) {
   const HW     = REC_TARGET_H * newW;
   const tensor = new Float32Array(3 * HW);
   for (let i = 0; i < HW; i++) {
-    tensor[i]          = data[i * 4]     / 127.5 - 1.0; // R
+    // Official PaddleOCR uses [-1.0, 1.0] for recognition and BGR channel order.
+    // (pixel / 255 - 0.5) / 0.5  ===  pixel / 127.5 - 1.0
+    tensor[i]          = data[i * 4 + 2] / 127.5 - 1.0; // B
     tensor[HW + i]     = data[i * 4 + 1] / 127.5 - 1.0; // G
-    tensor[HW * 2 + i] = data[i * 4 + 2] / 127.5 - 1.0; // B
+    tensor[HW * 2 + i] = data[i * 4]     / 127.5 - 1.0; // R
   }
 
   return { tensor, width: newW };
@@ -342,10 +343,11 @@ function preprocessForRecognition(cropCanvas) {
 
 /**
  * CTC greedy decode.
- * For ch_PP-OCRv4_rec + ppocr_keys_v1.txt: blank token = last index (numClasses − 1 = dictLen).
+ * For ch_PP-OCRv4_rec: blank token is at index 0.
+ * Characters in dictionary correspond to indices 1 to N-1.
  */
 function ctcDecode(logits, seqLen, numClasses) {
-  const blank = numClasses - 1;
+  const BLANK_INDEX = 0;
   let prevIdx = -1;
   let result  = '';
 
@@ -355,8 +357,12 @@ function ctcDecode(logits, seqLen, numClasses) {
       const v = logits[t * numClasses + c];
       if (v > maxVal) { maxVal = v; maxIdx = c; }
     }
-    if (maxIdx !== blank && maxIdx !== prevIdx) {
-      result += dictionary[maxIdx] || '';
+    if (maxIdx !== BLANK_INDEX && maxIdx !== prevIdx) {
+      // The dictionary matches indices from 1 onwards (i.e. model output index 1 is dict[0]).
+      const char = dictionary[maxIdx - 1];
+      if (char && char !== '<unk>') {
+        result += char;
+      }
     }
     prevIdx = maxIdx;
   }
@@ -391,6 +397,71 @@ async function recognizeCrop(srcCanvas, box) {
   }
 }
 
+// ── Preprocessing ──────────────────────────────────────────────────────────────
+
+/**
+ * Preprocess screenshot based on PoC pipeline:
+ * 1. 4x upscale
+ * 2. Greyscale + Threshold (220)
+ * 3. Negate
+ * 4. Pad by 60px with white background
+ */
+function preprocessScreenshot(srcCanvas) {
+  const SCALE = 4;
+  const PAD = 60;
+  const w = srcCanvas.width;
+  const h = srcCanvas.height;
+
+  // 1. Upscale to intermediate canvas
+  const upW = w * SCALE;
+  const upH = h * SCALE;
+  
+  const upCanvas = document.createElement('canvas');
+  upCanvas.width = upW;
+  upCanvas.height = upH;
+  const upCtx = upCanvas.getContext('2d');
+  
+  upCtx.fillStyle = 'white';
+  upCtx.fillRect(0, 0, upW, upH);
+  upCtx.imageSmoothingEnabled = true;
+  upCtx.imageSmoothingQuality = 'high';
+  upCtx.drawImage(srcCanvas, 0, 0, w, h, 0, 0, upW, upH);
+
+  // 2 & 3. Greyscale, threshold (220), and negate
+  const imgData = upCtx.getImageData(0, 0, upW, upH);
+  const data = imgData.data;
+
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i];
+    const g = data[i+1];
+    const b = data[i+2];
+    // Luminance formula
+    const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+    // threshold 220: if >= 220 then 0 (black, due to negate), else 255 (white)
+    const val = gray >= 220 ? 0 : 255;
+
+    data[i] = val;
+    data[i+1] = val;
+    data[i+2] = val;
+    data[i+3] = 255; // Keep fully opaque
+  }
+  upCtx.putImageData(imgData, 0, 0);
+
+  // 4. Apply padding into final canvas
+  const outW = upW + PAD * 2;
+  const outH = upH + PAD * 2;
+  const finalCanvas = document.createElement('canvas');
+  finalCanvas.width = outW;
+  finalCanvas.height = outH;
+  const finalCtx = finalCanvas.getContext('2d');
+
+  finalCtx.fillStyle = 'white';
+  finalCtx.fillRect(0, 0, outW, outH);
+  finalCtx.drawImage(upCanvas, PAD, PAD);
+
+  return finalCanvas;
+}
+
 // ── Message handler ────────────────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -417,15 +488,15 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       const blob   = await resp.blob();
       const bitmap = await createImageBitmap(blob);
       console.log('[YCR:Offscreen] Image decoded:', bitmap.width, 'x', bitmap.height);
-      const srcCanvas = document.createElement('canvas');
-      srcCanvas.width  = bitmap.width;
-      srcCanvas.height = bitmap.height;
-      srcCanvas.getContext('2d').drawImage(bitmap, 0, 0);
+      const rawCanvas = document.createElement('canvas');
+      rawCanvas.width  = bitmap.width;
+      rawCanvas.height = bitmap.height;
+      rawCanvas.getContext('2d').drawImage(bitmap, 0, 0);
       bitmap.close();
 
       // Step 1: detect text regions in the subtitle area
       console.log('[YCR:Offscreen] Running detection…');
-      const boxes = await detectTextRegions(srcCanvas);
+      const boxes = await detectTextRegions(rawCanvas);
       console.log('[YCR:Offscreen] Detected', boxes.length, 'text region(s)');
 
       if (boxes.length === 0) {
@@ -437,7 +508,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       // Matches poc_2: lines.map(l => l.text).join('')
       const parts = [];
       for (const box of boxes) {
-        const rawText = await recognizeCrop(srcCanvas, box);
+        const rawText = await recognizeCrop(rawCanvas, box);
         if (rawText) parts.push(rawText);
       }
 
