@@ -52,7 +52,18 @@ function ensureOverlay() {
 }
 
 function ensureSidePanel() {
-  if (!sidePanel) sidePanel = new SidePanel();
+  if (!sidePanel) {
+    sidePanel = new SidePanel();
+    sidePanel.setOnToggle(() => {
+      if (recognitionEnabled) {
+        stopLiveLoop(true);
+        sidePanel.updateToggleButton(false);
+      } else {
+        startLiveLoop(true);
+        sidePanel.updateToggleButton(true);
+      }
+    });
+  }
   return sidePanel;
 }
 
@@ -103,22 +114,16 @@ function getVideoTimestamp(videoEl) {
 }
 
 function startLiveLoop(explicit = false) {
-  if (explicit) recognitionEnabled = true;
+  if (explicit) {
+    recognitionEnabled = true;
+    chrome.runtime.sendMessage({ action: 'STATE_CHANGED', isLooping: true }).catch(() => {});
+  }
   if (!recognitionEnabled) return;
 
   const videoEl = document.querySelector('#movie_player video');
   if (!videoEl || videoEl.paused) {
     // Make sure panel toggles even if video is paused
     ensureSidePanel().show();
-    ensureSidePanel().setOnToggle(() => {
-      if (recognitionEnabled) {
-        stopLiveLoop(true);
-        ensureSidePanel().updateToggleButton(false);
-      } else {
-        startLiveLoop(true);
-        ensureSidePanel().updateToggleButton(true);
-      }
-    });
     return;
   }
 
@@ -128,17 +133,6 @@ function startLiveLoop(explicit = false) {
   ensureSidePanel().show();
   ensureSidePanel().showLoading();
   loadAndApplySettings();
-
-  // Wire panel toggle button back to loop lifecycle (D-11)
-  ensureSidePanel().setOnToggle(() => {
-    if (recognitionEnabled) {
-      stopLiveLoop(true);
-      ensureSidePanel().updateToggleButton(false);
-    } else {
-      startLiveLoop(true);
-      ensureSidePanel().updateToggleButton(true);
-    }
-  });
 
   loopIntervalId = setInterval(async () => {
     if (isTicking) return; // overlap guard (Pitfall 1)
@@ -187,7 +181,10 @@ function startLiveLoop(explicit = false) {
 }
 
 function stopLiveLoop(explicit = false) {
-  if (explicit) recognitionEnabled = false;
+  if (explicit) {
+    recognitionEnabled = false;
+    chrome.runtime.sendMessage({ action: 'STATE_CHANGED', isLooping: false }).catch(() => {});
+  }
   if (loopIntervalId !== null) {
     clearInterval(loopIntervalId);
     loopIntervalId = null;

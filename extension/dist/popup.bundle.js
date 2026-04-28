@@ -82,6 +82,19 @@
       setStatus("processing");
     }
   });
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message.action === "STATE_CHANGED") {
+      if (message.isLooping) {
+        btnRecognize.textContent = "Stop Recognition";
+        btnRecognize.dataset.looping = "true";
+        setStatus("processing");
+      } else {
+        btnRecognize.textContent = "Recognize Text";
+        btnRecognize.dataset.looping = "false";
+        setStatus("ready");
+      }
+    }
+  });
   async function loadPresets() {
     const data = await chrome.storage.local.get("ycr_presets");
     presets = data.ycr_presets || [];

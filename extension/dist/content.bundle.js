@@ -803,6 +803,17 @@
         list.id = "ycr-entry-list";
         this._content.appendChild(list);
         this._listEl = list;
+        const jumpTopBtn = document.createElement("button");
+        jumpTopBtn.id = "ycr-jump-top";
+        jumpTopBtn.className = "ycr-toggle-btn";
+        jumpTopBtn.style.marginTop = "16px";
+        jumpTopBtn.textContent = "Jump to Top";
+        jumpTopBtn.addEventListener("click", () => {
+          if (this._content) {
+            this._content.scrollTop = 0;
+          }
+        });
+        this._content.appendChild(jumpTopBtn);
       }
       const entry = document.createElement("div");
       entry.className = "ycr-entry";
@@ -1047,7 +1058,18 @@
     return overlay;
   }
   function ensureSidePanel() {
-    if (!sidePanel) sidePanel = new SidePanel();
+    if (!sidePanel) {
+      sidePanel = new SidePanel();
+      sidePanel.setOnToggle(() => {
+        if (recognitionEnabled) {
+          stopLiveLoop(true);
+          sidePanel.updateToggleButton(false);
+        } else {
+          startLiveLoop(true);
+          sidePanel.updateToggleButton(true);
+        }
+      });
+    }
     return sidePanel;
   }
   function ensureOCR() {
@@ -1091,20 +1113,15 @@
     return duration >= 3600 || h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
   }
   function startLiveLoop(explicit = false) {
-    if (explicit) recognitionEnabled = true;
+    if (explicit) {
+      recognitionEnabled = true;
+      chrome.runtime.sendMessage({ action: "STATE_CHANGED", isLooping: true }).catch(() => {
+      });
+    }
     if (!recognitionEnabled) return;
     const videoEl = document.querySelector("#movie_player video");
     if (!videoEl || videoEl.paused) {
       ensureSidePanel().show();
-      ensureSidePanel().setOnToggle(() => {
-        if (recognitionEnabled) {
-          stopLiveLoop(true);
-          ensureSidePanel().updateToggleButton(false);
-        } else {
-          startLiveLoop(true);
-          ensureSidePanel().updateToggleButton(true);
-        }
-      });
       return;
     }
     if (isLooping) return;
@@ -1112,15 +1129,6 @@
     ensureSidePanel().show();
     ensureSidePanel().showLoading();
     loadAndApplySettings();
-    ensureSidePanel().setOnToggle(() => {
-      if (recognitionEnabled) {
-        stopLiveLoop(true);
-        ensureSidePanel().updateToggleButton(false);
-      } else {
-        startLiveLoop(true);
-        ensureSidePanel().updateToggleButton(true);
-      }
-    });
     loopIntervalId = setInterval(async () => {
       if (isTicking) return;
       const videoEl2 = document.querySelector("#movie_player video");
@@ -1167,7 +1175,11 @@
     }, 1e3);
   }
   function stopLiveLoop(explicit = false) {
-    if (explicit) recognitionEnabled = false;
+    if (explicit) {
+      recognitionEnabled = false;
+      chrome.runtime.sendMessage({ action: "STATE_CHANGED", isLooping: false }).catch(() => {
+      });
+    }
     if (loopIntervalId !== null) {
       clearInterval(loopIntervalId);
       loopIntervalId = null;

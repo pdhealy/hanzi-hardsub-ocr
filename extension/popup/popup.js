@@ -105,6 +105,20 @@ btnRecognize.addEventListener('click', async () => {
   }
 });
 
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.action === 'STATE_CHANGED') {
+    if (message.isLooping) {
+      btnRecognize.textContent = 'Stop Recognition';
+      btnRecognize.dataset.looping = 'true';
+      setStatus('processing');
+    } else {
+      btnRecognize.textContent = 'Recognize Text';
+      btnRecognize.dataset.looping = 'false';
+      setStatus('ready');
+    }
+  }
+});
+
 // --- Presets Logic ---
 
 async function loadPresets() {

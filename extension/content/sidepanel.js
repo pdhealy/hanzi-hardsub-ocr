@@ -479,6 +479,18 @@ export class SidePanel {
       list.id = 'ycr-entry-list';
       this._content.appendChild(list);
       this._listEl = list;
+
+      const jumpTopBtn = document.createElement('button');
+      jumpTopBtn.id = 'ycr-jump-top';
+      jumpTopBtn.className = 'ycr-toggle-btn';
+      jumpTopBtn.style.marginTop = '16px';
+      jumpTopBtn.textContent = 'Jump to Top';
+      jumpTopBtn.addEventListener('click', () => {
+        if (this._content) {
+          this._content.scrollTop = 0;
+        }
+      });
+      this._content.appendChild(jumpTopBtn);
     }
 
     const entry = document.createElement('div');
