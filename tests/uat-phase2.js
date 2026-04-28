@@ -222,6 +222,14 @@ async function testToggleSync(browser) {
     <button id="btn-draw" class="btn">Draw New Subtitle Area</button>
     <button id="btn-recognize" class="btn" disabled>Recognize Text</button>
   </div>
+  <div class="presets-section" id="presets-section">
+    <div class="presets-header">Presets</div>
+    <ul id="preset-list" class="preset-list"></ul>
+    <div id="save-preset-container" class="save-preset-container" style="display: none;">
+      <input type="text" id="preset-name" placeholder="Preset name" class="preset-input">
+      <button id="btn-save-preset" class="btn btn-secondary btn-small">Save</button>
+    </div>
+  </div>
   <script>
     // Mock chrome APIs — simulate a content script that is NOT looping initially
     window.__mockIsLooping = false;
