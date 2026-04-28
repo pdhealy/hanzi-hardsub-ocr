@@ -617,6 +617,53 @@
   outline: 2px solid #2563EB;
   outline-offset: 2px;
 }
+
+#ycr-settings-menu {
+  display: none;
+  flex-direction: column;
+  padding: 16px;
+  background: #F9FAFB;
+  border-bottom: 1px solid #E5E7EB;
+  font-size: 13px;
+  color: #374151;
+}
+
+#ycr-settings-menu.ycr-visible {
+  display: flex;
+}
+
+.ycr-settings-group {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 12px;
+}
+
+.ycr-settings-label {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+.ycr-settings-input {
+  width: 100%;
+  cursor: pointer;
+}
+
+.ycr-settings-color-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ycr-settings-color {
+  cursor: pointer;
+  padding: 0;
+  border: 1px solid #D1D5DB;
+  border-radius: 4px;
+  width: 32px;
+  height: 24px;
+}
 `;
   function escapeHtml(text) {
     return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -660,12 +707,39 @@
       collapseBtn.setAttribute("aria-label", "Collapse Panel");
       collapseBtn.textContent = "\u2013";
       collapseBtn.addEventListener("click", () => this.collapse());
+      const settingsMenu = document.createElement("div");
+      settingsMenu.id = "ycr-settings-menu";
+      settingsMenu.innerHTML = `
+      <div class="ycr-settings-group">
+        <div class="ycr-settings-label">
+          <span>Font Size</span>
+          <span id="ycr-font-size-val">14px</span>
+        </div>
+        <input type="range" id="ycr-font-size-input" class="ycr-settings-input" min="12" max="28" step="1" value="14">
+      </div>
+      <div class="ycr-settings-group">
+        <div class="ycr-settings-label">
+          <span>Font Color</span>
+          <span id="ycr-font-color-hint">#111827</span>
+        </div>
+        <div class="ycr-settings-color-row">
+          <input type="color" id="ycr-font-color-input" class="ycr-settings-color" value="#111827">
+        </div>
+      </div>
+      <div class="ycr-settings-group" style="margin-bottom: 0;">
+        <div class="ycr-settings-label">
+          <span>Background Opacity</span>
+          <span id="ycr-bg-opacity-val">1.0</span>
+        </div>
+        <input type="range" id="ycr-bg-opacity-input" class="ycr-settings-input" min="0.1" max="1" step="0.05" value="1">
+      </div>
+    `;
       const settingsBtn = document.createElement("button");
       settingsBtn.id = "ycr-panel-settings";
       settingsBtn.setAttribute("aria-label", "Open Settings");
       settingsBtn.textContent = "\u2699";
       settingsBtn.addEventListener("click", () => {
-        chrome.runtime.sendMessage({ action: "OPEN_SETTINGS" });
+        settingsMenu.classList.toggle("ycr-visible");
       });
       const closeBtn = document.createElement("button");
       closeBtn.id = "ycr-panel-close";
@@ -676,6 +750,40 @@
       header.appendChild(collapseBtn);
       header.appendChild(settingsBtn);
       header.appendChild(closeBtn);
+      const fontSizeInput = settingsMenu.querySelector("#ycr-font-size-input");
+      const fontSizeVal = settingsMenu.querySelector("#ycr-font-size-val");
+      const fontColorInput = settingsMenu.querySelector("#ycr-font-color-input");
+      const fontColorHint = settingsMenu.querySelector("#ycr-font-color-hint");
+      const bgOpacityInput = settingsMenu.querySelector("#ycr-bg-opacity-input");
+      const bgOpacityVal = settingsMenu.querySelector("#ycr-bg-opacity-val");
+      const updateSettingsStorage = () => {
+        const newSettings = {
+          ycrFontSize: parseInt(fontSizeInput.value, 10),
+          ycrFontColor: fontColorInput.value,
+          ycrBgOpacity: parseFloat(bgOpacityInput.value)
+        };
+        chrome.storage.sync.set(newSettings);
+      };
+      fontSizeInput.addEventListener("input", () => {
+        fontSizeVal.textContent = fontSizeInput.value + "px";
+        updateSettingsStorage();
+      });
+      fontColorInput.addEventListener("input", () => {
+        fontColorHint.textContent = fontColorInput.value;
+        updateSettingsStorage();
+      });
+      bgOpacityInput.addEventListener("input", () => {
+        bgOpacityVal.textContent = parseFloat(bgOpacityInput.value).toFixed(2);
+        updateSettingsStorage();
+      });
+      chrome.storage.sync.get(DEFAULT_SETTINGS, (settings) => {
+        fontSizeInput.value = settings.ycrFontSize;
+        fontSizeVal.textContent = settings.ycrFontSize + "px";
+        fontColorInput.value = settings.ycrFontColor;
+        fontColorHint.textContent = settings.ycrFontColor;
+        bgOpacityInput.value = settings.ycrBgOpacity;
+        bgOpacityVal.textContent = parseFloat(settings.ycrBgOpacity).toFixed(2);
+      });
       const controls = document.createElement("div");
       controls.id = "ycr-loop-controls";
       controls.style.display = "none";
@@ -692,6 +800,7 @@
       jumpBtn.id = "ycr-jump-bottom";
       jumpBtn.className = "ycr-toggle-btn";
       jumpBtn.style.marginTop = "8px";
+      jumpBtn.style.display = "none";
       jumpBtn.textContent = "Jump to Bottom";
       jumpBtn.addEventListener("click", () => {
         if (this._content) {
@@ -701,10 +810,14 @@
       controls.appendChild(toggleBtn);
       controls.appendChild(jumpBtn);
       this._controls = controls;
+      this._jumpBottomBtn = jumpBtn;
       const content = document.createElement("div");
       content.id = "ycr-panel-content";
       content.setAttribute("aria-live", "polite");
+      content.addEventListener("scroll", () => this._updateScrollButtons());
+      window.addEventListener("resize", () => this._updateScrollButtons());
       panel.appendChild(header);
+      panel.appendChild(settingsMenu);
       panel.appendChild(controls);
       panel.appendChild(content);
       const tab = document.createElement("div");
@@ -758,6 +871,16 @@
         document.addEventListener("mousemove", onMouseMove);
         document.addEventListener("mouseup", onMouseUp);
       });
+    }
+    _updateScrollButtons() {
+      if (!this._content) return;
+      const isScrollable = this._content.scrollHeight > this._content.clientHeight;
+      if (this._jumpBottomBtn) {
+        this._jumpBottomBtn.style.display = isScrollable ? "block" : "none";
+      }
+      if (this._jumpTopBtn) {
+        this._jumpTopBtn.style.display = isScrollable ? "block" : "none";
+      }
     }
     show() {
       if (this._panel) {

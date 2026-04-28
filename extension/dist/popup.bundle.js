@@ -125,6 +125,18 @@
       const actionContainer = document.createElement("div");
       actionContainer.style.display = "flex";
       actionContainer.style.gap = "4px";
+      const saveCoordsBtn = document.createElement("button");
+      saveCoordsBtn.className = "btn-remove-preset";
+      saveCoordsBtn.innerHTML = "&#128190;";
+      saveCoordsBtn.title = "Overwrite with current selection";
+      saveCoordsBtn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const response = await sendToContentScript({ action: "GET_STATUS" });
+        if (response?.rect) {
+          preset.rect = response.rect;
+          savePresetsToStorage();
+        }
+      });
       const editBtn = document.createElement("button");
       editBtn.className = "btn-remove-preset";
       editBtn.innerHTML = "&#9998;";

@@ -104,10 +104,10 @@ async function makePanelPage(browser, storage = {}) {
   return page;
 }
 
-// ── test 1 — Gear icon exists and sends OPEN_SETTINGS ────────────────────
+// ── test 1 — Gear icon exists and toggles inline settings menu ────────────────────
 
 async function testGearIconMessage(browser) {
-  console.log('\nTest 1: Gear icon sends OPEN_SETTINGS message');
+  console.log('\nTest 1: Gear icon toggles inline settings menu');
   const page = await makePanelPage(browser);
 
   await page.evaluate(() => {
@@ -143,18 +143,18 @@ async function testGearIconMessage(browser) {
   );
 
   // Click the gear icon
+  const menuVisibleBefore = await page.evaluate(() => {
+    return document.getElementById('ycr-settings-menu').classList.contains('ycr-visible');
+  });
+  assert(!menuVisibleBefore, 'Settings menu is hidden initially');
+
   await page.click('#ycr-panel-settings');
   await page.waitForTimeout(50);
 
-  const sentOpenSettings = await page.evaluate(() =>
-    window.__sentMessages.some(m => m.action === 'OPEN_SETTINGS')
-  );
-  assert(sentOpenSettings, 'Clicking gear icon sends { action: "OPEN_SETTINGS" } message');
-
-  const urlOpened = await page.evaluate(() =>
-    window.__openedUrls.some(u => u.includes('options/options.html'))
-  );
-  assert(urlOpened, 'OPEN_SETTINGS triggers opening of options/options.html URL');
+  const menuVisibleAfter = await page.evaluate(() => {
+    return document.getElementById('ycr-settings-menu').classList.contains('ycr-visible');
+  });
+  assert(menuVisibleAfter, 'Clicking gear icon shows inline settings menu');
 
   await page.close();
 }
