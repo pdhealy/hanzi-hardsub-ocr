@@ -119,9 +119,10 @@ const PANEL_STYLES = `
 }
 
 #ycr-loop-controls {
-  padding: 0 0 12px 0;
+  padding: 16px 16px 12px 16px;
   border-bottom: 1px solid #E5E7EB;
-  margin-bottom: 12px;
+  background: #FFFFFF;
+  z-index: 2;
 }
 
 .ycr-toggle-btn {
@@ -284,6 +285,7 @@ export class SidePanel {
     // Resize handle
     const handle = document.createElement('div');
     handle.id = 'ycr-resize-handle';
+    handle.innerHTML = `<svg width="8" height="24" viewBox="0 0 8 24" fill="currentColor"><path d="M2 6h2v2H2V6zm4 0h2v2H6V6zM2 11h2v2H2v-2zm4 0h2v2H6v-2zM2 16h2v2H2v-2zm4 0h2v2H6v-2z"/></svg>`;
     panel.appendChild(handle);
 
     // Header
@@ -319,12 +321,43 @@ export class SidePanel {
     header.appendChild(settingsBtn);
     header.appendChild(closeBtn);
 
+    // Controls area
+    const controls = document.createElement('div');
+    controls.id = 'ycr-loop-controls';
+    controls.style.display = 'none';
+
+    const toggleBtn = document.createElement('button');
+    toggleBtn.id = 'ycr-panel-toggle';
+    toggleBtn.className = 'ycr-toggle-btn ycr-toggle-active';
+    toggleBtn.textContent = 'Stop Recognition';
+    toggleBtn.addEventListener('click', () => {
+      if (this._onToggle) {
+        this._onToggle();
+      }
+    });
+
+    const jumpBtn = document.createElement('button');
+    jumpBtn.id = 'ycr-jump-bottom';
+    jumpBtn.className = 'ycr-toggle-btn';
+    jumpBtn.style.marginTop = '8px';
+    jumpBtn.textContent = 'Jump to Bottom';
+    jumpBtn.addEventListener('click', () => {
+      if (this._content) {
+        this._content.scrollTop = this._content.scrollHeight;
+      }
+    });
+
+    controls.appendChild(toggleBtn);
+    controls.appendChild(jumpBtn);
+    this._controls = controls;
+
     // Content area
     const content = document.createElement('div');
     content.id = 'ycr-panel-content';
     content.setAttribute('aria-live', 'polite');
 
     panel.appendChild(header);
+    panel.appendChild(controls);
     panel.appendChild(content);
 
     // Create the floating collapse tab (sibling to panel, not child)
@@ -373,7 +406,7 @@ export class SidePanel {
     handle.addEventListener('mousedown', (e) => {
       isResizing = true;
       startX = e.clientX;
-      startWidth = parseInt(panel.style.width, 10) || 300;
+      startWidth = parseInt(panel.style.width, 10) || 450;
       e.preventDefault();
 
       const onMouseMove = (e) => {
@@ -440,21 +473,7 @@ export class SidePanel {
     // Initialize list container on first entry
     if (!this._listEl) {
       this._content.innerHTML = '';
-
-      // Panel-level Start/Stop toggle (D-11)
-      const controls = document.createElement('div');
-      controls.id = 'ycr-loop-controls';
-      const toggleBtn = document.createElement('button');
-      toggleBtn.id = 'ycr-panel-toggle';
-      toggleBtn.className = 'ycr-toggle-btn ycr-toggle-active';
-      toggleBtn.textContent = 'Stop Recognition';
-      toggleBtn.addEventListener('click', () => {
-        if (this._onToggle) {
-          this._onToggle();
-        }
-      });
-      controls.appendChild(toggleBtn);
-      this._content.appendChild(controls);
+      this._controls.style.display = 'block';
 
       const list = document.createElement('div');
       list.id = 'ycr-entry-list';
@@ -542,6 +561,7 @@ export class SidePanel {
   showLoading() {
     if (!this._content) return;
     if (this._listEl) return;
+    if (this._controls) this._controls.style.display = 'none';
     this._content.innerHTML = `
       <div class="ycr-state" aria-busy="true">
         <div class="ycr-spinner"></div>
@@ -560,12 +580,14 @@ export class SidePanel {
   showText(text) {
     if (!this._content) return;
     if (this._listEl) return;
+    if (this._controls) this._controls.style.display = 'none';
     this._content.innerHTML = `<div class="ycr-ocr-output">${escapeHtml(text)}</div>`;
   }
 
   showEmpty() {
     if (!this._content) return;
     if (this._listEl) return;
+    if (this._controls) this._controls.style.display = 'none';
     this._content.innerHTML = `
       <div class="ycr-state">
         <div class="ycr-state-heading" style="font-size: 13px; font-weight: 400; line-height: 1.4; color: #6B7280;">No text recognized</div>
@@ -577,10 +599,11 @@ export class SidePanel {
   showNoSelection() {
     if (!this._content) return;
     if (this._listEl) return;
+    if (this._controls) this._controls.style.display = 'none';
     this._content.innerHTML = `
       <div class="ycr-state">
         <div class="ycr-state-heading" style="font-size: 13px; font-weight: 400; line-height: 1.4; color: #6B7280;">No area selected</div>
-        <div class="ycr-state-body" style="font-size: 13px; color: #6B7280; margin-top: 8px;">Use 'Draw Subtitle Area' to mark the subtitle region on the video.</div>
+        <div class="ycr-state-body" style="font-size: 13px; color: #6B7280; margin-top: 8px;">Use 'Draw New Subtitle Area' to mark the subtitle region on the video.</div>
       </div>
     `;
   }
@@ -588,6 +611,7 @@ export class SidePanel {
   showError(message) {
     if (!this._content) return;
     if (this._listEl) return;
+    if (this._controls) this._controls.style.display = 'none';
     const detail = message ? escapeHtml(String(message)) : 'An error occurred while reading the image. Check the selection area and try again.';
     this._content.innerHTML = `
       <div class="ycr-state">

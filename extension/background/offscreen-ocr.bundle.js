@@ -10879,9 +10879,9 @@ ${u}`, c = n.createShaderModule({ code: d, label: e.name });
     const HW = REC_TARGET_H * newW;
     const tensor = new Float32Array(3 * HW);
     for (let i = 0; i < HW; i++) {
-      tensor[i] = data[i * 4 + 2] / 255;
-      tensor[HW + i] = data[i * 4 + 1] / 255;
-      tensor[HW * 2 + i] = data[i * 4] / 255;
+      tensor[i] = data[i * 4 + 2] / 127.5 - 1;
+      tensor[HW + i] = data[i * 4 + 1] / 127.5 - 1;
+      tensor[HW * 2 + i] = data[i * 4] / 127.5 - 1;
     }
     return { tensor, width: newW };
   }

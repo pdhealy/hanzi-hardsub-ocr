@@ -12,6 +12,7 @@ let ocrEngine = null;
 // Live OCR loop state
 let loopIntervalId = null;
 let isLooping = false;
+let recognitionEnabled = false;
 let isTicking = false;
 let lastRecognizedText = '';
 let scanCount = 0;
@@ -101,7 +102,26 @@ function getVideoTimestamp(videoEl) {
   return (duration >= 3600 || h > 0) ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
-function startLiveLoop() {
+function startLiveLoop(explicit = false) {
+  if (explicit) recognitionEnabled = true;
+  if (!recognitionEnabled) return;
+
+  const videoEl = document.querySelector('#movie_player video');
+  if (!videoEl || videoEl.paused) {
+    // Make sure panel toggles even if video is paused
+    ensureSidePanel().show();
+    ensureSidePanel().setOnToggle(() => {
+      if (recognitionEnabled) {
+        stopLiveLoop(true);
+        ensureSidePanel().updateToggleButton(false);
+      } else {
+        startLiveLoop(true);
+        ensureSidePanel().updateToggleButton(true);
+      }
+    });
+    return;
+  }
+
   if (isLooping) return; // D-03: only one loop at a time
   isLooping = true;
 
@@ -111,20 +131,20 @@ function startLiveLoop() {
 
   // Wire panel toggle button back to loop lifecycle (D-11)
   ensureSidePanel().setOnToggle(() => {
-    if (isLooping) {
-      stopLiveLoop();
+    if (recognitionEnabled) {
+      stopLiveLoop(true);
       ensureSidePanel().updateToggleButton(false);
     } else {
-      startLiveLoop();
+      startLiveLoop(true);
       ensureSidePanel().updateToggleButton(true);
     }
   });
 
   loopIntervalId = setInterval(async () => {
     if (isTicking) return; // overlap guard (Pitfall 1)
-    const videoEl = document.querySelector('#movie_player video');
-    if (!videoEl || videoEl.paused) return; // D-02: skip if paused
-    if (videoEl.readyState < 3) return; // buffering guard (Pitfall 6)
+    const videoEl2 = document.querySelector('#movie_player video');
+    if (!videoEl2 || videoEl2.paused) return; // D-02: skip if paused
+    if (videoEl2.readyState < 3) return; // buffering guard (Pitfall 6)
     if (!overlay || !overlay.hasSelection()) return;
 
     isTicking = true;
@@ -135,13 +155,13 @@ function startLiveLoop() {
       }
       const intrinsicRect = overlay.getVideoIntrinsicRect();
       const timeoutMs = scanCount === 0 ? OCR_INIT_TIMEOUT_MS : OCR_SCAN_TIMEOUT_MS;
-      const result = await recognizeWithTimeout(engine, videoEl, intrinsicRect, timeoutMs);
+      const result = await recognizeWithTimeout(engine, videoEl2, intrinsicRect, timeoutMs);
       const text = result.text;
       scanCount++;
       console.log('[YCR] scan', scanCount, 'intrinsicRect:', intrinsicRect, 'text:', JSON.stringify(text));
       if (text && text !== lastRecognizedText) { // D-05: dedup
         lastRecognizedText = text;
-        const ts = getVideoTimestamp(videoEl);
+        const ts = getVideoTimestamp(videoEl2);
         ensureSidePanel().appendEntry(ts, text); // D-04
       } else {
         ensureSidePanel().updateLoadingStatus(
@@ -155,9 +175,9 @@ function startLiveLoop() {
       }
       console.error('[YCR] Loop OCR error:', err);
       try {
-        const videoEl2 = document.querySelector('#movie_player video');
-        if (videoEl2) {
-          ensureSidePanel().appendEntry(getVideoTimestamp(videoEl2), '[Error: ' + err.message + ']');
+        const videoElErr = document.querySelector('#movie_player video');
+        if (videoElErr) {
+          ensureSidePanel().appendEntry(getVideoTimestamp(videoElErr), '[Error: ' + err.message + ']');
         }
       } catch { /* ignore display errors */ }
     } finally {
@@ -166,7 +186,8 @@ function startLiveLoop() {
   }, 1000); // D-01: 1-second interval
 }
 
-function stopLiveLoop() {
+function stopLiveLoop(explicit = false) {
+  if (explicit) recognitionEnabled = false;
   if (loopIntervalId !== null) {
     clearInterval(loopIntervalId);
     loopIntervalId = null;
@@ -177,6 +198,21 @@ function stopLiveLoop() {
   scanCount = 0;
 }
 
+// Auto start/stop on video play/pause
+document.addEventListener('play', (e) => {
+  if (e.target.tagName === 'VIDEO' && recognitionEnabled) {
+    startLiveLoop();
+    if (sidePanel) sidePanel.updateToggleButton(true);
+  }
+}, true);
+
+document.addEventListener('pause', (e) => {
+  if (e.target.tagName === 'VIDEO' && recognitionEnabled) {
+    stopLiveLoop(false);
+    if (sidePanel) sidePanel.updateToggleButton(false);
+  }
+}, true);
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'ACTIVATE_DRAW_MODE') {
     ensureOverlay().activateDrawMode();
@@ -184,19 +220,41 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return;
   }
 
+  if (message.action === 'DRAW_CENTERED_BOX') {
+    ensureOverlay().drawCenteredBox();
+    sendResponse({ ok: true, rect: ensureOverlay().getVideoIntrinsicRect() });
+    return;
+  }
+
+  if (message.action === 'REMOVE_BOX') {
+    if (overlay) overlay.removeBox();
+    sendResponse({ ok: true });
+    return;
+  }
+
+  if (message.action === 'SET_BOX') {
+    ensureOverlay().setBoxFromIntrinsic(message.rect);
+    sendResponse({ ok: true });
+    return;
+  }
+
   if (message.action === 'GET_STATUS') {
-    sendResponse({ boxDrawn: overlay ? overlay.hasSelection() : false, isLooping: isLooping });
+    sendResponse({ 
+      boxDrawn: overlay ? overlay.hasSelection() : false, 
+      rect: (overlay && overlay.hasSelection()) ? overlay.getVideoIntrinsicRect() : null,
+      isLooping: recognitionEnabled 
+    });
     return;
   }
 
   if (message.action === 'START_LIVE') {
-    startLiveLoop();
+    startLiveLoop(true);
     sendResponse({ ok: true, isLooping: true });
     return;
   }
 
   if (message.action === 'STOP_LIVE') {
-    stopLiveLoop();
+    stopLiveLoop(true);
     sendResponse({ ok: true, isLooping: false });
     return;
   }

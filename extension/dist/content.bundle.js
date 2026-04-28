@@ -39,15 +39,17 @@
     _createContainer() {
       const container = document.createElement("div");
       container.id = "ycr-overlay-container";
-      document.body.appendChild(container);
+      const parent = this._videoEl.closest("#movie_player") || this._videoEl.parentElement;
+      parent.appendChild(container);
       this._container = container;
-      container.style.position = "fixed";
+      container.style.position = "absolute";
       container.style.zIndex = "2147483646";
       container.style.pointerEvents = "none";
       const updatePosition = () => {
         const rect = this._videoEl.getBoundingClientRect();
-        container.style.top = `${rect.top}px`;
-        container.style.left = `${rect.left}px`;
+        const parentRect = parent.getBoundingClientRect();
+        container.style.top = `${rect.top - parentRect.top}px`;
+        container.style.left = `${rect.left - parentRect.left}px`;
         container.style.width = `${rect.width}px`;
         container.style.height = `${rect.height}px`;
       };
@@ -99,6 +101,44 @@
       this._wireBoxDrag();
     }
     // -------------------------------------------------------------- draw mode --
+    drawCenteredBox() {
+      if (!this._container) return;
+      this.deactivateDrawMode();
+      const containerW = this._container.offsetWidth;
+      const containerH = this._container.offsetHeight;
+      let w = 400;
+      let h = 100;
+      if (w > containerW - 40) w = containerW - 40;
+      if (h > containerH - 40) h = containerH - 40;
+      const x = (containerW - w) / 2;
+      const y = (containerH - h) / 2;
+      this._applyBoxRect(x, y, w, h);
+      this._box.style.display = "block";
+      this._selectionCSS = { x, y, width: w, height: h };
+      this._setHandlesVisible(true);
+    }
+    removeBox() {
+      if (this._box) {
+        this._box.style.display = "none";
+      }
+      this._selectionCSS = null;
+      this._setHandlesVisible(false);
+    }
+    setBoxFromIntrinsic(rect) {
+      if (!this._container || !this._videoEl || !rect) return;
+      this.deactivateDrawMode();
+      const videoRect = this._videoEl.getBoundingClientRect();
+      const scaleX = videoRect.width / this._videoEl.videoWidth;
+      const scaleY = videoRect.height / this._videoEl.videoHeight;
+      const x = rect.x * scaleX;
+      const y = rect.y * scaleY;
+      const w = rect.width * scaleX;
+      const h = rect.height * scaleY;
+      this._applyBoxRect(x, y, w, h);
+      this._box.style.display = "block";
+      this._selectionCSS = { x, y, width: w, height: h };
+      this._setHandlesVisible(true);
+    }
     activateDrawMode() {
       if (!this._container) {
         console.log("[YCR] Overlay container not ready yet");
@@ -451,9 +491,10 @@
 }
 
 #ycr-loop-controls {
-  padding: 0 0 12px 0;
+  padding: 16px 16px 12px 16px;
   border-bottom: 1px solid #E5E7EB;
-  margin-bottom: 12px;
+  background: #FFFFFF;
+  z-index: 2;
 }
 
 .ycr-toggle-btn {
@@ -607,6 +648,7 @@
       panel.id = "ycr-side-panel";
       const handle = document.createElement("div");
       handle.id = "ycr-resize-handle";
+      handle.innerHTML = `<svg width="8" height="24" viewBox="0 0 8 24" fill="currentColor"><path d="M2 6h2v2H2V6zm4 0h2v2H6V6zM2 11h2v2H2v-2zm4 0h2v2H6v-2zM2 16h2v2H2v-2zm4 0h2v2H6v-2z"/></svg>`;
       panel.appendChild(handle);
       const header = document.createElement("div");
       header.id = "ycr-panel-header";
@@ -634,10 +676,36 @@
       header.appendChild(collapseBtn);
       header.appendChild(settingsBtn);
       header.appendChild(closeBtn);
+      const controls = document.createElement("div");
+      controls.id = "ycr-loop-controls";
+      controls.style.display = "none";
+      const toggleBtn = document.createElement("button");
+      toggleBtn.id = "ycr-panel-toggle";
+      toggleBtn.className = "ycr-toggle-btn ycr-toggle-active";
+      toggleBtn.textContent = "Stop Recognition";
+      toggleBtn.addEventListener("click", () => {
+        if (this._onToggle) {
+          this._onToggle();
+        }
+      });
+      const jumpBtn = document.createElement("button");
+      jumpBtn.id = "ycr-jump-bottom";
+      jumpBtn.className = "ycr-toggle-btn";
+      jumpBtn.style.marginTop = "8px";
+      jumpBtn.textContent = "Jump to Bottom";
+      jumpBtn.addEventListener("click", () => {
+        if (this._content) {
+          this._content.scrollTop = this._content.scrollHeight;
+        }
+      });
+      controls.appendChild(toggleBtn);
+      controls.appendChild(jumpBtn);
+      this._controls = controls;
       const content = document.createElement("div");
       content.id = "ycr-panel-content";
       content.setAttribute("aria-live", "polite");
       panel.appendChild(header);
+      panel.appendChild(controls);
       panel.appendChild(content);
       const tab = document.createElement("div");
       tab.id = "ycr-collapse-tab";
@@ -674,7 +742,7 @@
       handle.addEventListener("mousedown", (e) => {
         isResizing = true;
         startX = e.clientX;
-        startWidth = parseInt(panel.style.width, 10) || 300;
+        startWidth = parseInt(panel.style.width, 10) || 450;
         e.preventDefault();
         const onMouseMove = (e2) => {
           if (!isResizing) return;
@@ -730,19 +798,7 @@
       if (!this._content) return;
       if (!this._listEl) {
         this._content.innerHTML = "";
-        const controls = document.createElement("div");
-        controls.id = "ycr-loop-controls";
-        const toggleBtn = document.createElement("button");
-        toggleBtn.id = "ycr-panel-toggle";
-        toggleBtn.className = "ycr-toggle-btn ycr-toggle-active";
-        toggleBtn.textContent = "Stop Recognition";
-        toggleBtn.addEventListener("click", () => {
-          if (this._onToggle) {
-            this._onToggle();
-          }
-        });
-        controls.appendChild(toggleBtn);
-        this._content.appendChild(controls);
+        this._controls.style.display = "block";
         const list = document.createElement("div");
         list.id = "ycr-entry-list";
         this._content.appendChild(list);
@@ -818,6 +874,7 @@
     showLoading() {
       if (!this._content) return;
       if (this._listEl) return;
+      if (this._controls) this._controls.style.display = "none";
       this._content.innerHTML = `
       <div class="ycr-state" aria-busy="true">
         <div class="ycr-spinner"></div>
@@ -834,11 +891,13 @@
     showText(text) {
       if (!this._content) return;
       if (this._listEl) return;
+      if (this._controls) this._controls.style.display = "none";
       this._content.innerHTML = `<div class="ycr-ocr-output">${escapeHtml(text)}</div>`;
     }
     showEmpty() {
       if (!this._content) return;
       if (this._listEl) return;
+      if (this._controls) this._controls.style.display = "none";
       this._content.innerHTML = `
       <div class="ycr-state">
         <div class="ycr-state-heading" style="font-size: 13px; font-weight: 400; line-height: 1.4; color: #6B7280;">No text recognized</div>
@@ -849,16 +908,18 @@
     showNoSelection() {
       if (!this._content) return;
       if (this._listEl) return;
+      if (this._controls) this._controls.style.display = "none";
       this._content.innerHTML = `
       <div class="ycr-state">
         <div class="ycr-state-heading" style="font-size: 13px; font-weight: 400; line-height: 1.4; color: #6B7280;">No area selected</div>
-        <div class="ycr-state-body" style="font-size: 13px; color: #6B7280; margin-top: 8px;">Use 'Draw Subtitle Area' to mark the subtitle region on the video.</div>
+        <div class="ycr-state-body" style="font-size: 13px; color: #6B7280; margin-top: 8px;">Use 'Draw New Subtitle Area' to mark the subtitle region on the video.</div>
       </div>
     `;
     }
     showError(message) {
       if (!this._content) return;
       if (this._listEl) return;
+      if (this._controls) this._controls.style.display = "none";
       const detail = message ? escapeHtml(String(message)) : "An error occurred while reading the image. Check the selection area and try again.";
       this._content.innerHTML = `
       <div class="ycr-state">
@@ -957,6 +1018,7 @@
   var ocrEngine = null;
   var loopIntervalId = null;
   var isLooping = false;
+  var recognitionEnabled = false;
   var isTicking = false;
   var lastRecognizedText = "";
   var scanCount = 0;
@@ -1028,26 +1090,42 @@
     const ss = String(s).padStart(2, "0");
     return duration >= 3600 || h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
   }
-  function startLiveLoop() {
+  function startLiveLoop(explicit = false) {
+    if (explicit) recognitionEnabled = true;
+    if (!recognitionEnabled) return;
+    const videoEl = document.querySelector("#movie_player video");
+    if (!videoEl || videoEl.paused) {
+      ensureSidePanel().show();
+      ensureSidePanel().setOnToggle(() => {
+        if (recognitionEnabled) {
+          stopLiveLoop(true);
+          ensureSidePanel().updateToggleButton(false);
+        } else {
+          startLiveLoop(true);
+          ensureSidePanel().updateToggleButton(true);
+        }
+      });
+      return;
+    }
     if (isLooping) return;
     isLooping = true;
     ensureSidePanel().show();
     ensureSidePanel().showLoading();
     loadAndApplySettings();
     ensureSidePanel().setOnToggle(() => {
-      if (isLooping) {
-        stopLiveLoop();
+      if (recognitionEnabled) {
+        stopLiveLoop(true);
         ensureSidePanel().updateToggleButton(false);
       } else {
-        startLiveLoop();
+        startLiveLoop(true);
         ensureSidePanel().updateToggleButton(true);
       }
     });
     loopIntervalId = setInterval(async () => {
       if (isTicking) return;
-      const videoEl = document.querySelector("#movie_player video");
-      if (!videoEl || videoEl.paused) return;
-      if (videoEl.readyState < 3) return;
+      const videoEl2 = document.querySelector("#movie_player video");
+      if (!videoEl2 || videoEl2.paused) return;
+      if (videoEl2.readyState < 3) return;
       if (!overlay || !overlay.hasSelection()) return;
       isTicking = true;
       try {
@@ -1057,13 +1135,13 @@
         }
         const intrinsicRect = overlay.getVideoIntrinsicRect();
         const timeoutMs = scanCount === 0 ? OCR_INIT_TIMEOUT_MS : OCR_SCAN_TIMEOUT_MS;
-        const result = await recognizeWithTimeout(engine, videoEl, intrinsicRect, timeoutMs);
+        const result = await recognizeWithTimeout(engine, videoEl2, intrinsicRect, timeoutMs);
         const text = result.text;
         scanCount++;
         console.log("[YCR] scan", scanCount, "intrinsicRect:", intrinsicRect, "text:", JSON.stringify(text));
         if (text && text !== lastRecognizedText) {
           lastRecognizedText = text;
-          const ts = getVideoTimestamp(videoEl);
+          const ts = getVideoTimestamp(videoEl2);
           ensureSidePanel().appendEntry(ts, text);
         } else {
           ensureSidePanel().updateLoadingStatus(
@@ -1077,9 +1155,9 @@
         }
         console.error("[YCR] Loop OCR error:", err);
         try {
-          const videoEl2 = document.querySelector("#movie_player video");
-          if (videoEl2) {
-            ensureSidePanel().appendEntry(getVideoTimestamp(videoEl2), "[Error: " + err.message + "]");
+          const videoElErr = document.querySelector("#movie_player video");
+          if (videoElErr) {
+            ensureSidePanel().appendEntry(getVideoTimestamp(videoElErr), "[Error: " + err.message + "]");
           }
         } catch {
         }
@@ -1088,7 +1166,8 @@
       }
     }, 1e3);
   }
-  function stopLiveLoop() {
+  function stopLiveLoop(explicit = false) {
+    if (explicit) recognitionEnabled = false;
     if (loopIntervalId !== null) {
       clearInterval(loopIntervalId);
       loopIntervalId = null;
@@ -1098,23 +1177,54 @@
     lastRecognizedText = "";
     scanCount = 0;
   }
+  document.addEventListener("play", (e) => {
+    if (e.target.tagName === "VIDEO" && recognitionEnabled) {
+      startLiveLoop();
+      if (sidePanel) sidePanel.updateToggleButton(true);
+    }
+  }, true);
+  document.addEventListener("pause", (e) => {
+    if (e.target.tagName === "VIDEO" && recognitionEnabled) {
+      stopLiveLoop(false);
+      if (sidePanel) sidePanel.updateToggleButton(false);
+    }
+  }, true);
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === "ACTIVATE_DRAW_MODE") {
       ensureOverlay().activateDrawMode();
       sendResponse({ ok: true });
       return;
     }
+    if (message.action === "DRAW_CENTERED_BOX") {
+      ensureOverlay().drawCenteredBox();
+      sendResponse({ ok: true, rect: ensureOverlay().getVideoIntrinsicRect() });
+      return;
+    }
+    if (message.action === "REMOVE_BOX") {
+      if (overlay) overlay.removeBox();
+      sendResponse({ ok: true });
+      return;
+    }
+    if (message.action === "SET_BOX") {
+      ensureOverlay().setBoxFromIntrinsic(message.rect);
+      sendResponse({ ok: true });
+      return;
+    }
     if (message.action === "GET_STATUS") {
-      sendResponse({ boxDrawn: overlay ? overlay.hasSelection() : false, isLooping });
+      sendResponse({
+        boxDrawn: overlay ? overlay.hasSelection() : false,
+        rect: overlay && overlay.hasSelection() ? overlay.getVideoIntrinsicRect() : null,
+        isLooping: recognitionEnabled
+      });
       return;
     }
     if (message.action === "START_LIVE") {
-      startLiveLoop();
+      startLiveLoop(true);
       sendResponse({ ok: true, isLooping: true });
       return;
     }
     if (message.action === "STOP_LIVE") {
-      stopLiveLoop();
+      stopLiveLoop(true);
       sendResponse({ ok: true, isLooping: false });
       return;
     }

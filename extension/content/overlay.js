@@ -52,22 +52,24 @@ export class SelectionOverlay {
   _createContainer() {
     const container = document.createElement('div');
     container.id = 'ycr-overlay-container';
-    document.body.appendChild(container);
+    
+    // Append to video's parent or #movie_player instead of document.body
+    // This allows absolute positioning relative to the video, fixing the scrolling issue
+    const parent = this._videoEl.closest('#movie_player') || this._videoEl.parentElement;
+    parent.appendChild(container);
     this._container = container;
 
-    // Set initial styles — pointer-events and cursor are managed separately
-    // by activateDrawMode/deactivateDrawMode so they are NOT set here.
-    container.style.position = 'fixed';
+    // Set initial styles
+    container.style.position = 'absolute';
     container.style.zIndex = '2147483646';
     container.style.pointerEvents = 'none';
 
-    // Position the container over the video element using fixed coordinates.
-    // Only updates geometry — never touches pointer-events or cursor, so draw
-    // mode state is not clobbered when the ResizeObserver fires.
+    // Position the container over the video element using relative coordinates
     const updatePosition = () => {
       const rect = this._videoEl.getBoundingClientRect();
-      container.style.top = `${rect.top}px`;
-      container.style.left = `${rect.left}px`;
+      const parentRect = parent.getBoundingClientRect();
+      container.style.top = `${rect.top - parentRect.top}px`;
+      container.style.left = `${rect.left - parentRect.left}px`;
       container.style.width = `${rect.width}px`;
       container.style.height = `${rect.height}px`;
     };
@@ -134,6 +136,59 @@ export class SelectionOverlay {
   }
 
   // -------------------------------------------------------------- draw mode --
+
+  drawCenteredBox() {
+    if (!this._container) return;
+
+    this.deactivateDrawMode();
+
+    const containerW = this._container.offsetWidth;
+    const containerH = this._container.offsetHeight;
+    
+    // Default box size
+    let w = 400;
+    let h = 100;
+    
+    // Prevent box from being larger than video
+    if (w > containerW - 40) w = containerW - 40;
+    if (h > containerH - 40) h = containerH - 40;
+
+    const x = (containerW - w) / 2;
+    const y = (containerH - h) / 2;
+
+    this._applyBoxRect(x, y, w, h);
+    this._box.style.display = 'block';
+    this._selectionCSS = { x, y, width: w, height: h };
+    this._setHandlesVisible(true);
+  }
+
+  removeBox() {
+    if (this._box) {
+      this._box.style.display = 'none';
+    }
+    this._selectionCSS = null;
+    this._setHandlesVisible(false);
+  }
+
+  setBoxFromIntrinsic(rect) {
+    if (!this._container || !this._videoEl || !rect) return;
+
+    this.deactivateDrawMode();
+
+    const videoRect = this._videoEl.getBoundingClientRect();
+    const scaleX = videoRect.width / this._videoEl.videoWidth;
+    const scaleY = videoRect.height / this._videoEl.videoHeight;
+
+    const x = rect.x * scaleX;
+    const y = rect.y * scaleY;
+    const w = rect.width * scaleX;
+    const h = rect.height * scaleY;
+
+    this._applyBoxRect(x, y, w, h);
+    this._box.style.display = 'block';
+    this._selectionCSS = { x, y, width: w, height: h };
+    this._setHandlesVisible(true);
+  }
 
   activateDrawMode() {
     if (!this._container) {

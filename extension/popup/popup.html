@@ -18,13 +18,21 @@
       id="btn-draw"
       class="btn btn-secondary"
       aria-label="Draw subtitle area on the YouTube video"
-    >Draw Subtitle Area</button>
+    >Draw New Subtitle Area</button>
     <button
       id="btn-recognize"
       class="btn btn-primary"
       aria-label="Recognize text in the drawn area"
       disabled
     >Recognize Text</button>
+  </div>
+  <div class="presets-section" id="presets-section">
+    <div class="presets-header">Presets</div>
+    <ul id="preset-list" class="preset-list"></ul>
+    <div id="save-preset-container" class="save-preset-container" style="display: none;">
+      <input type="text" id="preset-name" placeholder="Preset name" class="preset-input">
+      <button id="btn-save-preset" class="btn btn-secondary btn-small">Save</button>
+    </div>
   </div>
   <script src="../dist/popup.bundle.js"></script>
 </body>

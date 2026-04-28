@@ -50,9 +50,29 @@ async function testCollapse(browser) {
   console.log('\nTest 1: Panel collapse visual behavior');
   const page = await browser.newPage();
   await page.setContent('<html><head></head><body></body></html>');
+  
+  // Inject mock chrome object
+  await page.evaluate(() => {
+    window.chrome = {
+      storage: {
+        sync: { get: (defaults, cb) => cb(defaults) },
+        onChanged: { addListener: () => {}, removeListener: () => {} }
+      }
+    };
+  });
+
   await page.evaluate(loadSidePanel());
 
   await page.evaluate(() => {
+    if (!window.chrome) {
+      window.chrome = {};
+    }
+    if (!window.chrome.storage) {
+      window.chrome.storage = {
+        sync: { get: (defaults, cb) => cb(defaults) },
+        onChanged: { addListener: () => {}, removeListener: () => {} }
+      };
+    }
     window.__panel = new window.__SidePanel();
     window.__panel.show();
   });
@@ -122,6 +142,15 @@ async function testAutoScroll(browser) {
   await page.evaluate(loadSidePanel());
 
   await page.evaluate(() => {
+    if (!window.chrome) {
+      window.chrome = {};
+    }
+    if (!window.chrome.storage) {
+      window.chrome.storage = {
+        sync: { get: (defaults, cb) => cb(defaults) },
+        onChanged: { addListener: () => {}, removeListener: () => {} }
+      };
+    }
     window.__panel = new window.__SidePanel();
     window.__panel.show();
     // Track scrollIntoView calls
@@ -190,7 +219,7 @@ async function testToggleSync(browser) {
     <span class="status-label" id="status-label">Inactive</span>
   </div>
   <div class="buttons">
-    <button id="btn-draw" class="btn">Draw Subtitle Area</button>
+    <button id="btn-draw" class="btn">Draw New Subtitle Area</button>
     <button id="btn-recognize" class="btn" disabled>Recognize Text</button>
   </div>
   <script>
@@ -199,8 +228,11 @@ async function testToggleSync(browser) {
     window.__sentMessages = [];
 
     window.chrome = {
+      storage: {
+        local: { get: async () => ({}), set: async () => {} }
+      },
       tabs: {
-        query: async () => [{ id: 1 }],
+        query: async () => [{ id: 1, url: 'https://www.youtube.com/watch?v=123' }],
         sendMessage: async (tabId, msg) => {
           window.__sentMessages.push(msg);
           if (msg.action === 'GET_STATUS') {
