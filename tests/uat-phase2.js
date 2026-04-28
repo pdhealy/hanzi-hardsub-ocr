@@ -54,6 +54,9 @@ async function testCollapse(browser) {
   // Inject mock chrome object
   await page.evaluate(() => {
     window.chrome = {
+      runtime: {
+        onMessage: { addListener: () => {} }
+      },
       storage: {
         sync: { get: (defaults, cb) => cb(defaults) },
         onChanged: { addListener: () => {}, removeListener: () => {} }
@@ -199,6 +202,8 @@ async function testAutoScroll(browser) {
 async function testToggleSync(browser) {
   console.log('\nTest 3: Popup / panel toggle sync round-trip');
   const page = await browser.newPage();
+  page.on('console', msg => console.log('Mock page console:', msg.text()));
+  page.on('pageerror', err => console.log('Mock page error:', err));
   await page.setViewportSize({ width: 400, height: 600 });
 
   // Serve the popup HTML inline, with mocked chrome API
@@ -236,6 +241,9 @@ async function testToggleSync(browser) {
     window.__sentMessages = [];
 
     window.chrome = {
+      runtime: {
+        onMessage: { addListener: () => {} }
+      },
       storage: {
         local: { get: async () => ({}), set: async () => {} }
       },
