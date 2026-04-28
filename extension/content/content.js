@@ -57,10 +57,8 @@ function ensureSidePanel() {
     sidePanel.setOnToggle(() => {
       if (recognitionEnabled) {
         stopLiveLoop(true);
-        sidePanel.updateToggleButton(false);
       } else {
         startLiveLoop(true);
-        sidePanel.updateToggleButton(true);
       }
     });
   }
