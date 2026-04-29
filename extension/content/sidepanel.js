@@ -206,10 +206,10 @@ const PANEL_STYLES = `
 .ycr-custom-rt {
   display: inline-flex !important;
   justify-content: center !important;
-  font-size: 0.4em !important;
+  font-size: 0.3em !important;
   line-height: 1 !important;
-  width: 2.5em !important;
-  max-width: 2.5em !important;
+  width: 3.33em !important;
+  max-width: 3.33em !important;
   overflow: hidden !important;
   white-space: nowrap !important;
   direction: ltr !important;
