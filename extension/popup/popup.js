@@ -218,6 +218,7 @@ function renderPresets() {
       savePresetsToStorage();
     });
 
+    actionContainer.appendChild(saveCoordsBtn);
     actionContainer.appendChild(editBtn);
     actionContainer.appendChild(removeBtn);
 

@@ -178,6 +178,7 @@
         presets.splice(index, 1);
         savePresetsToStorage();
       });
+      actionContainer.appendChild(saveCoordsBtn);
       actionContainer.appendChild(editBtn);
       actionContainer.appendChild(removeBtn);
       li.addEventListener("dragstart", (e) => {

@@ -676,6 +676,62 @@
   width: 32px;
   height: 24px;
 }
+
+.ycr-settings-section-header {
+  display: flex;
+  justify-content: space-between;
+  cursor: pointer;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.ycr-settings-section-icon {
+  font-family: monospace;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.ycr-switch {
+  position: relative;
+  display: inline-block;
+  width: 34px;
+  height: 20px;
+}
+
+.ycr-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.ycr-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: #ccc;
+  transition: .4s;
+  border-radius: 20px;
+}
+
+.ycr-slider:before {
+  position: absolute;
+  content: "";
+  height: 16px;
+  width: 16px;
+  left: 2px;
+  bottom: 2px;
+  background-color: white;
+  transition: .4s;
+  border-radius: 50%;
+}
+
+input:checked + .ycr-slider {
+  background-color: #2563EB;
+}
+
+input:checked + .ycr-slider:before {
+  transform: translateX(14px);
+}
 `;
   function escapeHtml(text) {
     return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -722,30 +778,73 @@
       const settingsMenu = document.createElement("div");
       settingsMenu.id = "ycr-settings-menu";
       settingsMenu.innerHTML = `
-      <div class="ycr-settings-group">
-        <div class="ycr-settings-label">
-          <span>Font Size</span>
-          <span id="ycr-font-size-val">14px</span>
+      <div class="ycr-settings-section">
+        <div class="ycr-settings-section-header">
+          <span>Appearance Settings</span>
+          <span class="ycr-settings-section-icon">-</span>
         </div>
-        <input type="range" id="ycr-font-size-input" class="ycr-settings-input" min="12" max="28" step="1" value="14">
+        <div class="ycr-settings-section-content" style="display: block;">
+          <div class="ycr-settings-group">
+            <div class="ycr-settings-label">
+              <span>Font Size</span>
+              <span id="ycr-font-size-val">14px</span>
+            </div>
+            <input type="range" id="ycr-font-size-input" class="ycr-settings-input" min="12" max="40" step="1" value="14">
+          </div>
+          <div class="ycr-settings-group">
+            <div class="ycr-settings-label">
+              <span>Font Color</span>
+              <span id="ycr-font-color-hint">#111827</span>
+            </div>
+            <div class="ycr-settings-color-row">
+              <input type="color" id="ycr-font-color-input" class="ycr-settings-color" value="#111827">
+            </div>
+          </div>
+          <div class="ycr-settings-group" style="margin-bottom: 0;">
+            <div class="ycr-settings-label">
+              <span>Background Opacity</span>
+              <span id="ycr-bg-opacity-val">1.0</span>
+            </div>
+            <input type="range" id="ycr-bg-opacity-input" class="ycr-settings-input" min="0.1" max="1" step="0.05" value="1">
+          </div>
+        </div>
       </div>
-      <div class="ycr-settings-group">
-        <div class="ycr-settings-label">
-          <span>Font Color</span>
-          <span id="ycr-font-color-hint">#111827</span>
+      <div class="ycr-settings-section" style="margin-top: 16px;">
+        <div class="ycr-settings-section-header">
+          <span>Language Settings</span>
+          <span class="ycr-settings-section-icon">+</span>
         </div>
-        <div class="ycr-settings-color-row">
-          <input type="color" id="ycr-font-color-input" class="ycr-settings-color" value="#111827">
+        <div class="ycr-settings-section-content" style="display: none;">
+          <div class="ycr-settings-group" style="flex-direction: row; align-items: center; justify-content: space-between;">
+            <span style="font-weight: 500;">Pinyin</span>
+            <label class="ycr-switch">
+              <input type="checkbox" id="ycr-pinyin-toggle">
+              <span class="ycr-slider"></span>
+            </label>
+          </div>
+          <div class="ycr-settings-group" style="flex-direction: row; align-items: center; justify-content: space-between; margin-bottom: 0;">
+            <span style="font-weight: 500;">Bopofomo (Zhuyin)</span>
+            <label class="ycr-switch">
+              <input type="checkbox" id="ycr-zhuyin-toggle">
+              <span class="ycr-slider"></span>
+            </label>
+          </div>
         </div>
-      </div>
-      <div class="ycr-settings-group" style="margin-bottom: 0;">
-        <div class="ycr-settings-label">
-          <span>Background Opacity</span>
-          <span id="ycr-bg-opacity-val">1.0</span>
-        </div>
-        <input type="range" id="ycr-bg-opacity-input" class="ycr-settings-input" min="0.1" max="1" step="0.05" value="1">
       </div>
     `;
+      settingsMenu.querySelectorAll(".ycr-settings-section-header").forEach((header2) => {
+        header2.addEventListener("click", () => {
+          const content2 = header2.nextElementSibling;
+          const icon = header2.querySelector(".ycr-settings-section-icon");
+          if (content2.style.display === "none") {
+            content2.style.display = "block";
+            icon.textContent = "-";
+          } else {
+            content2.style.display = "none";
+            icon.textContent = "+";
+          }
+        });
+      });
       const settingsBtn = document.createElement("button");
       settingsBtn.id = "ycr-panel-settings";
       settingsBtn.setAttribute("aria-label", "Open Settings");
