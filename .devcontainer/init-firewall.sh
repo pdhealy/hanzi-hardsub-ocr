@@ -37,8 +37,8 @@ iptables -A INPUT -p tcp --sport 22 -m state --state ESTABLISHED -j ACCEPT
 iptables -A INPUT -i lo -j ACCEPT
 iptables -A OUTPUT -o lo -j ACCEPT
 
-# Create ipset with CIDR support; -exist keeps reruns idempotent.
-ipset create -exist allowed-domains hash:net
+# Create ipset with CIDR support
+ipset create allowed-domains hash:net
 
 # Fetch GitHub meta information and aggregate + add their IP ranges
 echo "Fetching GitHub IP ranges..."
@@ -60,61 +60,35 @@ while read -r cidr; do
         exit 1
     fi
     echo "Adding GitHub range $cidr"
-    ipset add -exist allowed-domains "$cidr"
+    ipset add allowed-domains "$cidr"
 done < <(echo "$gh_ranges" | jq -r '(.web + .api + .git)[]' | aggregate -q)
 
 # Resolve and add other allowed domains
-failed_domains=()
 for domain in \
     "registry.npmjs.org" \
-    "deb.debian.org" \
     "api.anthropic.com" \
     "sentry.io" \
     "statsig.anthropic.com" \
     "statsig.com" \
     "marketplace.visualstudio.com" \
     "vscode.blob.core.windows.net" \
-    "update.code.visualstudio.com" \
-    "cdn.playwright.dev" \
-    "playwright.download.prss.microsoft.com" \
-    "az764295.vo.msecnd.net" \
-    "pypi.org" \
-    "files.pythonhosted.org" \
-    "paddlepaddle.org.cn" \
-    "paddle-model-ecology.bj.bcebos.com" \
-    "bj.bcebos.com" \
-    "www.youtube.com" \
-    "youtube.com" \
-    "i.ytimg.com" \
-    "yt3.ggpht.com" \
-    "yt3.googleusercontent.com" \
-    "googlevideo.com" \
-    "accounts.google.com" \
-    "www.google.com" \
-    "gstatic.com" \
-    "www.googleapis.com" \
-    "static.doubleclick.net"; do
+    "update.code.visualstudio.com"; do
     echo "Resolving $domain..."
     ips=$(dig +noall +answer A "$domain" | awk '$4 == "A" {print $5}')
     if [ -z "$ips" ]; then
-        echo "WARNING: Failed to resolve $domain; continuing"
-        failed_domains+=("$domain")
-        continue
+        echo "ERROR: Failed to resolve $domain"
+        exit 1
     fi
     
     while read -r ip; do
         if [[ ! "$ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
-            echo "WARNING: Invalid IP from DNS for $domain: $ip"
-            continue
+            echo "ERROR: Invalid IP from DNS for $domain: $ip"
+            exit 1
         fi
         echo "Adding $ip for $domain"
-        ipset add -exist allowed-domains "$ip"
+        ipset add allowed-domains "$ip"
     done < <(echo "$ips")
 done
-
-if [ "${#failed_domains[@]}" -gt 0 ]; then
-    echo "WARNING: Some domains could not be resolved: ${failed_domains[*]}"
-fi
 
 # Get host IP from default route
 HOST_IP=$(ip route | grep default | cut -d" " -f3)
@@ -130,14 +104,6 @@ echo "Host network detected as: $HOST_NETWORK"
 iptables -A INPUT -s "$HOST_NETWORK" -j ACCEPT
 iptables -A OUTPUT -d "$HOST_NETWORK" -j ACCEPT
 
-# Allow TCP to Chrome Remote Debugging Protocol on the Docker host.
-# The host's 127.0.0.1:9222 is reachable inside the container as
-# host.docker.internal:9222 (resolved to HOST_IP by Docker).
-# The HOST_NETWORK rule above already covers this, but we add an
-# explicit targeted rule for clarity and forward-compatibility.
-iptables -A OUTPUT -p tcp -d "$HOST_IP" --dport 9222 -j ACCEPT
-iptables -A INPUT  -p tcp -s "$HOST_IP" --sport 9222 -m state --state ESTABLISHED -j ACCEPT
-
 # Set default policies to DROP first
 iptables -P INPUT DROP
 iptables -P FORWARD DROP
@@ -152,12 +118,6 @@ iptables -A OUTPUT -m set --match-set allowed-domains dst -j ACCEPT
 
 # Explicitly REJECT all other outbound traffic for immediate feedback
 iptables -A OUTPUT -j REJECT --reject-with icmp-admin-prohibited
-
-# Fix SSH agent socket permissions so the node user can access it
-if [ -S /run/host-services/ssh-auth.sock ]; then
-    chmod 0666 /run/host-services/ssh-auth.sock
-    echo "SSH agent socket permissions fixed"
-fi
 
 echo "Firewall configuration complete"
 echo "Verifying firewall rules..."

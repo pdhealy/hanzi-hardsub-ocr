@@ -193,7 +193,7 @@ const PANEL_STYLES = `
 }
 
 /* Ruby translations width constraint */
-.ycr-text ruby {
+.ycr-custom-ruby {
   display: inline-flex !important;
   flex-direction: column-reverse !important;
   align-items: center !important;
@@ -201,16 +201,11 @@ const PANEL_STYLES = `
   line-height: 1 !important;
 }
 
-.ycr-text rt {
-  display: block !important;
-  font-size: 0.5em !important;
-  line-height: 1 !important;
-  text-align: center !important;
-}
-
-.ycr-ruby-text {
+.ycr-custom-rt {
   display: inline-flex !important;
   justify-content: center !important;
+  font-size: 0.5em !important;
+  line-height: 1 !important;
   width: 0px !important;
   overflow: visible !important;
   white-space: nowrap !important;
