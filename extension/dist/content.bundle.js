@@ -25176,16 +25176,27 @@
 
 /* Ruby translations width constraint */
 .ycr-text ruby {
-  ruby-align: center;
+  display: inline-flex !important;
+  flex-direction: column-reverse !important;
+  align-items: center !important;
+  vertical-align: bottom !important;
+  line-height: 1 !important;
 }
 
 .ycr-text rt {
-  font-size: 0.5em; /* Scales perfectly with main character size */
-  display: inline-block;
-  max-width: 100%; /* Ensure translations are NO WIDER than their base characters */
-  overflow: visible; /* Show content visually without taking more flow space */
-  white-space: nowrap;
-  text-align: center;
+  display: block !important;
+  font-size: 0.5em !important;
+  line-height: 1 !important;
+  text-align: center !important;
+}
+
+.ycr-ruby-text {
+  display: inline-flex !important;
+  justify-content: center !important;
+  width: 0px !important;
+  overflow: visible !important;
+  white-space: nowrap !important;
+  direction: ltr !important;
 }
 
 #ycr-collapse-tab {
@@ -25684,10 +25695,10 @@ input:checked + .ycr-slider:before {
           if (!middleVal) {
             annotatedText += char;
           } else {
-            annotatedText += `<ruby>${char}<rt><span class="ycr-ruby-text">${middleVal}</span></rt></ruby>`;
+            annotatedText += `<span class="ycr-custom-ruby">${char}<span class="ycr-custom-rt">${middleVal}</span></span>`;
           }
         } else {
-          annotatedText += `<ruby><ruby>${char}<rt><span class="ycr-ruby-text">${middleVal}</span></rt></ruby><rt><span class="ycr-ruby-text">${topVal}</span></rt></ruby>`;
+          annotatedText += `<span class="ycr-custom-ruby"><span class="ycr-custom-ruby">${char}<span class="ycr-custom-rt">${middleVal}</span></span><span class="ycr-custom-rt">${topVal}</span></span>`;
         }
       }
       return `<span class="ycr-ts">[${escapeHtml(timestamp)}]</span> <span class="ycr-text">${annotatedText}</span>`;
