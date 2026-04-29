@@ -199,17 +199,21 @@ const PANEL_STYLES = `
   align-items: center !important;
   vertical-align: bottom !important;
   line-height: 1 !important;
+  margin: 0 0.1em !important;
+  max-width: 1em !important;
 }
 
 .ycr-custom-rt {
   display: inline-flex !important;
   justify-content: center !important;
-  font-size: 0.5em !important;
+  font-size: 0.4em !important;
   line-height: 1 !important;
-  width: 0px !important;
-  overflow: visible !important;
+  width: 2.5em !important;
+  max-width: 2.5em !important;
+  overflow: hidden !important;
   white-space: nowrap !important;
   direction: ltr !important;
+  letter-spacing: -0.05em !important;
 }
 
 #ycr-collapse-tab {
