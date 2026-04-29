@@ -396,10 +396,14 @@
   position: absolute;
   left: 0;
   top: 0;
-  width: 8px;
+  width: 16px;
   height: 100%;
   cursor: col-resize;
   background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9CA3AF;
   z-index: 1;
 }
 
@@ -495,6 +499,14 @@
   border-bottom: 1px solid #E5E7EB;
   background: #FFFFFF;
   z-index: 2;
+}
+
+#ycr-bottom-controls {
+  padding: 12px 16px 16px 16px;
+  border-top: 1px solid #E5E7EB;
+  background: #FFFFFF;
+  z-index: 2;
+  display: none;
 }
 
 .ycr-toggle-btn {
@@ -695,7 +707,7 @@
       panel.id = "ycr-side-panel";
       const handle = document.createElement("div");
       handle.id = "ycr-resize-handle";
-      handle.innerHTML = `<svg viewBox="0 0 10 16" width="10" height="16" fill="currentColor"><circle cx="2" cy="2" r="1.5"/><circle cx="8" cy="2" r="1.5"/><circle cx="2" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="2" cy="14" r="1.5"/><circle cx="8" cy="14" r="1.5"/></svg>`;
+      handle.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-2-8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>`;
       panel.appendChild(handle);
       const header = document.createElement("div");
       header.id = "ycr-panel-header";
@@ -814,12 +826,27 @@
       const content = document.createElement("div");
       content.id = "ycr-panel-content";
       content.setAttribute("aria-live", "polite");
+      const bottomControls = document.createElement("div");
+      bottomControls.id = "ycr-bottom-controls";
+      const jumpTopBtn = document.createElement("button");
+      jumpTopBtn.id = "ycr-jump-top";
+      jumpTopBtn.className = "ycr-toggle-btn";
+      jumpTopBtn.textContent = "Jump to Top";
+      jumpTopBtn.addEventListener("click", () => {
+        if (this._content) {
+          this._content.scrollTop = 0;
+        }
+      });
+      bottomControls.appendChild(jumpTopBtn);
+      this._bottomControls = bottomControls;
+      this._jumpTopBtn = jumpTopBtn;
       content.addEventListener("scroll", () => this._updateScrollButtons());
       window.addEventListener("resize", () => this._updateScrollButtons());
       panel.appendChild(header);
       panel.appendChild(settingsMenu);
       panel.appendChild(controls);
       panel.appendChild(content);
+      panel.appendChild(bottomControls);
       const tab = document.createElement("div");
       tab.id = "ycr-collapse-tab";
       tab.textContent = "YCR";
@@ -878,8 +905,8 @@
       if (this._jumpBottomBtn) {
         this._jumpBottomBtn.style.display = isScrollable ? "block" : "none";
       }
-      if (this._jumpTopBtn) {
-        this._jumpTopBtn.style.display = isScrollable ? "block" : "none";
+      if (this._bottomControls) {
+        this._bottomControls.style.display = isScrollable ? "block" : "none";
       }
     }
     show() {
@@ -926,17 +953,6 @@
         list.id = "ycr-entry-list";
         this._content.appendChild(list);
         this._listEl = list;
-        const jumpTopBtn = document.createElement("button");
-        jumpTopBtn.id = "ycr-jump-top";
-        jumpTopBtn.className = "ycr-toggle-btn";
-        jumpTopBtn.style.marginTop = "16px";
-        jumpTopBtn.textContent = "Jump to Top";
-        jumpTopBtn.addEventListener("click", () => {
-          if (this._content) {
-            this._content.scrollTop = 0;
-          }
-        });
-        this._content.appendChild(jumpTopBtn);
       }
       const entry = document.createElement("div");
       entry.className = "ycr-entry";
