@@ -25684,10 +25684,10 @@ input:checked + .ycr-slider:before {
           if (!middleVal) {
             annotatedText += char;
           } else {
-            annotatedText += `<ruby>${char}<rt>${middleVal}</rt></ruby>`;
+            annotatedText += `<ruby>${char}<rt><span class="ycr-ruby-text">${middleVal}</span></rt></ruby>`;
           }
         } else {
-          annotatedText += `<ruby><ruby>${char}<rt>${middleVal}</rt></ruby><rt>${topVal}</rt></ruby>`;
+          annotatedText += `<ruby><ruby>${char}<rt><span class="ycr-ruby-text">${middleVal}</span></rt></ruby><rt><span class="ycr-ruby-text">${topVal}</span></rt></ruby>`;
         }
       }
       return `<span class="ycr-ts">[${escapeHtml(timestamp)}]</span> <span class="ycr-text">${annotatedText}</span>`;

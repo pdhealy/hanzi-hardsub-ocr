@@ -765,13 +765,13 @@ export class SidePanel {
         if (!middleVal) {
           annotatedText += char;
         } else {
-          annotatedText += `<ruby>${char}<rt>${middleVal}</rt></ruby>`;
+          annotatedText += `<ruby>${char}<rt><span class="ycr-ruby-text">${middleVal}</span></rt></ruby>`;
         }
       } else {
         // activeLength === 2 and both exist
         // Inner ruby puts middleVal above the character
         // Outer ruby puts topVal above the inner ruby (which is middleVal + char)
-        annotatedText += `<ruby><ruby>${char}<rt>${middleVal}</rt></ruby><rt>${topVal}</rt></ruby>`;
+        annotatedText += `<ruby><ruby>${char}<rt><span class="ycr-ruby-text">${middleVal}</span></rt></ruby><rt><span class="ycr-ruby-text">${topVal}</span></rt></ruby>`;
       }
     }
 
