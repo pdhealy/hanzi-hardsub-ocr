@@ -28,12 +28,13 @@ function assert(condition, label) {
 }
 
 function loadSidePanel() {
-  return fs.readFileSync(
+  const content = fs.readFileSync(
     path.join(__dirname, '../extension/content/sidepanel.js'),
     'utf8'
-  )
-    .replace(/^export class SidePanel/m, 'class SidePanel')
-    + '\nwindow.__SidePanel = SidePanel;';
+  );
+  return 'window.pinyin = (text) => Array.from(text).map(()=>"mock");\nwindow.pinyinToZhuyin = () => "mock";\n' + 
+         content.replace(/import .*/g, '').replace(/^export class SidePanel/m, 'class SidePanel') +
+         '\nwindow.__SidePanel = SidePanel;';
 }
 
 function loadOptions() {

@@ -1,6 +1,9 @@
 // SidePanel module — injects a resizable side panel into the YouTube page.
 // Displays OCR output, loading state, empty states, and error states.
 
+import { pinyin } from 'pinyin-pro';
+import { pinyinToZhuyin } from 'pinyin-zhuyin';
+
 const PANEL_STYLES = `
 #ycr-side-panel {
   position: fixed;
@@ -186,6 +189,21 @@ const PANEL_STYLES = `
 
 .ycr-text {
   white-space: pre-wrap;
+  line-height: 2.2; /* Extra space for ruby */
+}
+
+/* Ruby translations width constraint */
+.ycr-text ruby {
+  ruby-align: center;
+}
+
+.ycr-text rt {
+  font-size: 0.5em; /* Scales perfectly with main character size */
+  display: inline-block;
+  max-width: 100%; /* Ensure translations are NO WIDER than their base characters */
+  overflow: visible; /* Show content visually without taking more flow space */
+  white-space: nowrap;
+  text-align: center;
 }
 
 #ycr-collapse-tab {
@@ -370,6 +388,9 @@ const DEFAULT_SETTINGS = {
   ycrFontSize: 14,
   ycrFontColor: '#111827',
   ycrBgOpacity: 1.0,
+  ycrPinyinToggle: false,
+  ycrZhuyinToggle: false,
+  ycrActiveToggles: []
 };
 
 export class SidePanel {
@@ -383,6 +404,10 @@ export class SidePanel {
     this._tab = null;
     this._onToggle = null;
     this._onStorageChange = null;
+    this._entries = [];
+    this.activeToggles = [];
+    this.pinyinEnabled = false;
+    this.zhuyinEnabled = false;
     this._init();
   }
 
@@ -514,12 +539,17 @@ export class SidePanel {
     const fontColorHint = settingsMenu.querySelector('#ycr-font-color-hint');
     const bgOpacityInput = settingsMenu.querySelector('#ycr-bg-opacity-input');
     const bgOpacityVal = settingsMenu.querySelector('#ycr-bg-opacity-val');
+    const pinyinToggle = settingsMenu.querySelector('#ycr-pinyin-toggle');
+    const zhuyinToggle = settingsMenu.querySelector('#ycr-zhuyin-toggle');
 
     const updateSettingsStorage = () => {
       const newSettings = {
         ycrFontSize: parseInt(fontSizeInput.value, 10),
         ycrFontColor: fontColorInput.value,
         ycrBgOpacity: parseFloat(bgOpacityInput.value),
+        ycrPinyinToggle: pinyinToggle.checked,
+        ycrZhuyinToggle: zhuyinToggle.checked,
+        ycrActiveToggles: this.activeToggles
       };
       chrome.storage.sync.set(newSettings);
     };
@@ -539,6 +569,16 @@ export class SidePanel {
       updateSettingsStorage();
     });
 
+    pinyinToggle.addEventListener('change', (e) => {
+      this._updateToggles('pinyin', e.target.checked);
+      updateSettingsStorage();
+    });
+
+    zhuyinToggle.addEventListener('change', (e) => {
+      this._updateToggles('zhuyin', e.target.checked);
+      updateSettingsStorage();
+    });
+
     chrome.storage.sync.get(DEFAULT_SETTINGS, (settings) => {
       fontSizeInput.value = settings.ycrFontSize;
       fontSizeVal.textContent = settings.ycrFontSize + 'px';
@@ -546,6 +586,13 @@ export class SidePanel {
       fontColorHint.textContent = settings.ycrFontColor;
       bgOpacityInput.value = settings.ycrBgOpacity;
       bgOpacityVal.textContent = parseFloat(settings.ycrBgOpacity).toFixed(2);
+      
+      pinyinToggle.checked = settings.ycrPinyinToggle;
+      zhuyinToggle.checked = settings.ycrZhuyinToggle;
+      this.pinyinEnabled = settings.ycrPinyinToggle;
+      this.zhuyinEnabled = settings.ycrZhuyinToggle;
+      this.activeToggles = settings.ycrActiveToggles || [];
+      this._reRenderAllEntries();
     });
 
     // Controls area
@@ -635,7 +682,7 @@ export class SidePanel {
     // Load persisted settings and listen for future changes
     this.loadSettings();
     this._onStorageChange = (changes) => {
-      const keys = ['ycrFontSize', 'ycrFontColor', 'ycrBgOpacity'];
+      const keys = ['ycrFontSize', 'ycrFontColor', 'ycrBgOpacity', 'ycrPinyinToggle', 'ycrZhuyinToggle', 'ycrActiveToggles'];
       if (keys.some((k) => k in changes)) {
         const updated = {};
         for (const k of keys) {
@@ -646,10 +693,100 @@ export class SidePanel {
         // Merge with defaults then apply
         chrome.storage.sync.get(DEFAULT_SETTINGS, (settings) => {
           this._applySettings(settings);
+          this.pinyinEnabled = settings.ycrPinyinToggle;
+          this.zhuyinEnabled = settings.ycrZhuyinToggle;
+          this.activeToggles = settings.ycrActiveToggles || [];
+          if (changes.ycrPinyinToggle || changes.ycrZhuyinToggle || changes.ycrActiveToggles) {
+            this._reRenderAllEntries();
+          }
         });
       }
     };
     chrome.storage.onChanged.addListener(this._onStorageChange);
+  }
+
+  _updateToggles(type, isChecked) {
+    if (isChecked) {
+      if (!this.activeToggles.includes(type)) {
+        this.activeToggles.push(type);
+      }
+    } else {
+      this.activeToggles = this.activeToggles.filter(t => t !== type);
+    }
+    this.pinyinEnabled = this.activeToggles.includes('pinyin');
+    this.zhuyinEnabled = this.activeToggles.includes('zhuyin');
+    this._reRenderAllEntries();
+  }
+
+  _generateEntryHTML(timestamp, text) {
+    if (!this.pinyinEnabled && !this.zhuyinEnabled) {
+      return `<span class="ycr-ts">[${escapeHtml(timestamp)}]</span> <span class="ycr-text">${escapeHtml(text)}</span>`;
+    }
+
+    const pinyinArr = pinyin(text, { type: 'array', toneType: 'symbol' });
+    const zhuyinArr = pinyinArr.map(p => {
+      if (!p.trim() || !/[a-zA-Z]/.test(p)) return null;
+      try {
+        return pinyinToZhuyin(p) || null;
+      } catch {
+        return null;
+      }
+    });
+    
+    // Determine layers: top and middle annotations based on activation order
+    const activeLength = this.activeToggles.length;
+    let topType = null, middleType = null;
+    
+    if (activeLength === 1) {
+      middleType = this.activeToggles[0];
+    } else if (activeLength === 2) {
+      // The toggle activated SECOND appears BELOW the one activated FIRST.
+      // So first toggle = topType, second toggle = middleType.
+      topType = this.activeToggles[0];
+      middleType = this.activeToggles[1];
+    }
+
+    let annotatedText = '';
+    for (let i = 0; i < text.length; i++) {
+      const char = escapeHtml(text[i]);
+      const pinyinVal = pinyinArr[i] ? escapeHtml(pinyinArr[i]) : '';
+      const zhuyinVal = zhuyinArr[i] ? escapeHtml(zhuyinArr[i]) : '';
+
+      const getVal = (type) => type === 'pinyin' ? pinyinVal : (type === 'zhuyin' ? zhuyinVal : '');
+      const middleVal = getVal(middleType);
+      const topVal = getVal(topType);
+
+      if (!middleVal && !topVal) {
+        annotatedText += char;
+        continue;
+      }
+
+      if (activeLength === 1 || !topVal) {
+        if (!middleVal) {
+          annotatedText += char;
+        } else {
+          annotatedText += `<ruby>${char}<rt>${middleVal}</rt></ruby>`;
+        }
+      } else {
+        // activeLength === 2 and both exist
+        // Inner ruby puts middleVal above the character
+        // Outer ruby puts topVal above the inner ruby (which is middleVal + char)
+        annotatedText += `<ruby><ruby>${char}<rt>${middleVal}</rt></ruby><rt>${topVal}</rt></ruby>`;
+      }
+    }
+
+    return `<span class="ycr-ts">[${escapeHtml(timestamp)}]</span> <span class="ycr-text">${annotatedText}</span>`;
+  }
+
+  _reRenderAllEntries() {
+    if (!this._listEl || !this._entries) return;
+    this._listEl.innerHTML = '';
+    for (const { timestamp, text } of this._entries) {
+      const entry = document.createElement('div');
+      entry.className = 'ycr-entry';
+      entry.innerHTML = this._generateEntryHTML(timestamp, text);
+      this._listEl.appendChild(entry);
+    }
   }
 
   _initResize(handle, panel) {
@@ -745,9 +882,11 @@ export class SidePanel {
       this._listEl = list;
     }
 
+    this._entries.push({ timestamp, text });
+
     const entry = document.createElement('div');
     entry.className = 'ycr-entry';
-    entry.innerHTML = `<span class="ycr-ts">[${escapeHtml(timestamp)}]</span> <span class="ycr-text">${escapeHtml(text)}</span>`;
+    entry.innerHTML = this._generateEntryHTML(timestamp, text);
     this._listEl.appendChild(entry);
 
     entry.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -755,6 +894,7 @@ export class SidePanel {
 
   clearEntries() {
     this._listEl = null;
+    this._entries = [];
     if (this._content) {
       this._content.innerHTML = '';
     }
@@ -914,5 +1054,6 @@ export class SidePanel {
     this._listEl = null;
     this._collapsed = false;
     this._onToggle = null;
+    this._entries = [];
   }
 }
