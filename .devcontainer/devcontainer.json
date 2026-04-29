@@ -10,7 +10,8 @@
         }
     },
     "features": {
-        "ghcr.io/devcontainers/features/copilot-cli:1": {}
+        "ghcr.io/devcontainers/features/copilot-cli:1": {},
+        "ghcr.io/devcontainers/features/github-cli:1": {}
     },
     "runArgs": [
         "--cap-add=NET_ADMIN",
@@ -45,7 +46,8 @@
                 "bradlc.vscode-tailwindcss",
                 "ms-vscode.vscode-typescript-next",
                 "eamodio.gitlens",
-                "ms-vscode.live-server"
+                "ms-vscode.live-server",
+                "astro-build.astro-vscode"
             ],
             "settings": {
                 "editor.formatOnSave": true,
