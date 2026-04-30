@@ -1,7 +1,7 @@
 /**
  * E2E — Chrome Extension (Playwright + Chromium)
  *
- * Verifies that the YouTube Chinese Reader extension loads and runs correctly
+ * Verifies that the Hanzi Hardsub Reader extension loads and runs correctly
  * in a real Chromium browser, with specific focus on the fixes applied in
  * Phase 04 (PaddleOCR migration):
  *

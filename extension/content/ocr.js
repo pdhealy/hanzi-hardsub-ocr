@@ -1,4 +1,4 @@
-// OCR module — YouTube Chinese Reader
+// OCR module — Hanzi Hardsub Reader
 // Captures a selected video frame and delegates OCR to background service worker.
 
 export class OCREngine {

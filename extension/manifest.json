@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "YouTube Chinese Reader",
+  "name": "Hanzi Hardsub Reader",
   "version": "1.0.0",
   "description": "OCR hard-coded Chinese subtitles on YouTube videos",
   "permissions": ["activeTab", "scripting", "storage", "offscreen"],

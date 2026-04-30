@@ -25069,7 +25069,7 @@ input:checked + .ycr-slider:before {
       header.id = "ycr-panel-header";
       const title = document.createElement("span");
       title.id = "ycr-panel-title";
-      title.textContent = "YouTube Chinese Reader";
+      title.textContent = "Hanzi Hardsub Reader";
       const collapseBtn = document.createElement("button");
       collapseBtn.id = "ycr-panel-collapse";
       collapseBtn.setAttribute("aria-label", "Collapse Panel");

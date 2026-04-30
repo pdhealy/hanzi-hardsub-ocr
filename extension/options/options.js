@@ -1,4 +1,4 @@
-// YouTube Chinese Reader — Settings Page Script
+// Hanzi Hardsub Reader — Settings Page Script
 
 const DEFAULT_SETTINGS = {
   ycrFontSize: 14,

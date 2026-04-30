@@ -1,4 +1,4 @@
-// SelectionOverlay module — YouTube Chinese Reader
+// SelectionOverlay module — Hanzi Hardsub Reader
 // Implements draw mode, corner resize handles, box dragging, and coordinate conversion.
 
 export class SelectionOverlay {

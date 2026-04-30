@@ -219,7 +219,7 @@ async function testToggleSync(browser) {
 </style>
 </head>
 <body>
-  <h1>YouTube Chinese Reader</h1>
+  <h1>Hanzi Hardsub Reader</h1>
   <div>
     <span class="status-dot" id="status-dot"></span>
     <span class="status-label" id="status-label">Inactive</span>

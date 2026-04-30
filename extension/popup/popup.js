@@ -1,4 +1,4 @@
-// YouTube Chinese Reader - Popup Script
+// Hanzi Hardsub Reader - Popup Script
 
 const btnDraw = document.getElementById('btn-draw');
 const btnRecognize = document.getElementById('btn-recognize');
