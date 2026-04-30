@@ -10938,13 +10938,19 @@ ${u}`, c = n.createShaderModule({ code: d, label: e.name });
     if (message.action === "OFFSCREEN_TRANSLATE_TEXT") {
       (async () => {
         try {
-          const translatorApi = window.ai && window.ai.translator || window.translation || window.chrome && window.chrome.aiOriginTrial && window.chrome.aiOriginTrial.translator;
+          const translatorApi = window.ai && window.ai.translator || window.translation || window.chrome && window.chrome.aiOriginTrial && window.chrome.aiOriginTrial.translator || (typeof window.Translator !== "undefined" ? window.Translator : null);
           if (!translatorApi) {
             sendResponse({ ok: false, error: "Translation API not available in this browser. Check chrome://flags/#translation-api" });
             return;
           }
           let isSupported = false;
-          if (typeof translatorApi.capabilities === "function") {
+          if (typeof translatorApi.availability === "function") {
+            const avail = await translatorApi.availability({
+              sourceLanguage: "zh",
+              targetLanguage: "en"
+            });
+            isSupported = avail && avail !== "no";
+          } else if (typeof translatorApi.capabilities === "function") {
             const caps = await translatorApi.capabilities();
             isSupported = caps && caps.available !== "no";
           } else if (typeof translatorApi.canTranslate === "function") {
@@ -10961,10 +10967,21 @@ ${u}`, c = n.createShaderModule({ code: d, label: e.name });
             sendResponse({ ok: false, error: "Translation not supported for zh to en. Check language packs." });
             return;
           }
-          const translator = await translatorApi.create({
-            sourceLanguage: "zh",
-            targetLanguage: "en"
-          });
+          let translator;
+          if (typeof translatorApi.createTranslator === "function") {
+            translator = await translatorApi.createTranslator({
+              sourceLanguage: "zh",
+              targetLanguage: "en"
+            });
+          } else if (typeof translatorApi.create === "function") {
+            translator = await translatorApi.create({
+              sourceLanguage: "zh",
+              targetLanguage: "en"
+            });
+          } else {
+            sendResponse({ ok: false, error: "Translation API found but missing create/createTranslator methods." });
+            return;
+          }
           const translatedText = await translator.translate(message.text);
           sendResponse({ ok: true, translation: translatedText });
         } catch (err) {

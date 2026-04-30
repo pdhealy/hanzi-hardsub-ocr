@@ -468,19 +468,26 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.action === 'OFFSCREEN_TRANSLATE_TEXT') {
     (async () => {
       try {
-        const translatorApi = (window.ai && window.ai.translator) || 
-                              window.translation || 
-                              (window.chrome && window.chrome.aiOriginTrial && window.chrome.aiOriginTrial.translator);
-                              
+        const translatorApi = (window.ai && window.ai.translator) ||
+                              window.translation ||
+                              (window.chrome && window.chrome.aiOriginTrial && window.chrome.aiOriginTrial.translator) ||
+                              (typeof window.Translator !== 'undefined' ? window.Translator : null);
+
         if (!translatorApi) {
           sendResponse({ ok: false, error: 'Translation API not available in this browser. Check chrome://flags/#translation-api' });
           return;
         }
 
         let isSupported = false;
-        
-        // Handle new API (capabilities) vs old API (canTranslate)
-        if (typeof translatorApi.capabilities === 'function') {
+
+        // Handle new API (availability/capabilities) vs old API (canTranslate)
+        if (typeof translatorApi.availability === 'function') {
+          const avail = await translatorApi.availability({
+            sourceLanguage: 'zh',
+            targetLanguage: 'en',
+          });
+          isSupported = avail && avail !== 'no';
+        } else if (typeof translatorApi.capabilities === 'function') {
           const caps = await translatorApi.capabilities();
           // caps.available can be 'readily', 'after-download', or 'no'
           isSupported = caps && caps.available !== 'no';
@@ -500,11 +507,21 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           return;
         }
 
-        const translator = await translatorApi.create({
-          sourceLanguage: 'zh',
-          targetLanguage: 'en',
-        });
-
+        let translator;
+        if (typeof translatorApi.createTranslator === 'function') {
+          translator = await translatorApi.createTranslator({
+            sourceLanguage: 'zh',
+            targetLanguage: 'en',
+          });
+        } else if (typeof translatorApi.create === 'function') {
+          translator = await translatorApi.create({
+            sourceLanguage: 'zh',
+            targetLanguage: 'en',
+          });
+        } else {
+          sendResponse({ ok: false, error: 'Translation API found but missing create/createTranslator methods.' });
+          return;
+        }
         const translatedText = await translator.translate(message.text);
         sendResponse({ ok: true, translation: translatedText });
       } catch (err) {
