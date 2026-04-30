@@ -1,4 +1,4 @@
-// esbuild build configuration for YouTube Chinese Reader extension
+// esbuild build configuration for Hanzi Hardsub Reader extension
 const esbuild = require('esbuild');
 const fs = require('fs');
 const path = require('path');

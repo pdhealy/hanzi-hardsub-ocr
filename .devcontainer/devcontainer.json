@@ -1,5 +1,5 @@
 {
-    "name": "yt_chinese_sub_extractor_devc-devcontainer",
+    "name": "Hanzi-Hardsub-Extractor-DevContainer",
     "build": {
         "dockerfile": "Dockerfile",
         "args": {

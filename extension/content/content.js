@@ -1,4 +1,4 @@
-// Content script entry point — YouTube Chinese Reader
+// Content script entry point — Hanzi Hardsub Reader
 // Orchestrates popup message handling, overlay, OCR, and side panel display.
 
 import { SelectionOverlay } from './overlay.js';
@@ -325,4 +325,4 @@ document.addEventListener('yt-navigate-finish', () => {
   if (ocrEngine) { ocrEngine.terminate(); ocrEngine = null; }
 });
 
-console.log('[YCR] YouTube Chinese Reader content script loaded');
+console.log('[YCR] Hanzi Hardsub Reader content script loaded');

@@ -20,7 +20,7 @@ async function ensureOffscreenDocument() {
 }
 
 chrome.runtime.onInstalled.addListener(async () => {
-  console.log('[YCR] YouTube Chinese Reader installed. Pre-loading PaddleOCR models...');
+  console.log('[YCR] Hanzi Hardsub Reader installed. Pre-loading PaddleOCR models...');
   try {
     await ensureOffscreenDocument();
     console.log('[YCR] Offscreen document created — model download initiated.');

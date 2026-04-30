@@ -25442,7 +25442,7 @@ input:checked + .ycr-slider:before {
       header.id = "ycr-panel-header";
       const title = document.createElement("span");
       title.id = "ycr-panel-title";
-      title.textContent = "YouTube Chinese Reader";
+      title.textContent = "Hanzi Hardsub Reader";
       const collapseBtn = document.createElement("button");
       collapseBtn.id = "ycr-panel-collapse";
       collapseBtn.setAttribute("aria-label", "Collapse Panel");
@@ -26410,6 +26410,6 @@ input:checked + .ycr-slider:before {
       ocrEngine = null;
     }
   });
-  console.log("[YCR] YouTube Chinese Reader content script loaded");
+  console.log("[YCR] Hanzi Hardsub Reader content script loaded");
 })();
 //# sourceMappingURL=content.bundle.js.map

@@ -472,7 +472,7 @@ export class SidePanel {
 
     const title = document.createElement('span');
     title.id = 'ycr-panel-title';
-    title.textContent = 'YouTube Chinese Reader';
+    title.textContent = 'Hanzi Hardsub Reader';
 
     const collapseBtn = document.createElement('button');
     collapseBtn.id = 'ycr-panel-collapse';
