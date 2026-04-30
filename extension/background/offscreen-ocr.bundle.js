@@ -10935,6 +10935,35 @@ ${u}`, c = n.createShaderModule({ code: d, label: e.name });
     }
   }
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message.action === "OFFSCREEN_TRANSLATE_TEXT") {
+      (async () => {
+        try {
+          const translatorApi = window.ai && window.ai.translator || window.translation;
+          if (!translatorApi) {
+            sendResponse({ ok: false, error: "Translation API not available in this browser" });
+            return;
+          }
+          const canTranslate = await translatorApi.canTranslate({
+            sourceLanguage: "zh",
+            targetLanguage: "en"
+          });
+          if (canTranslate === "no") {
+            sendResponse({ ok: false, error: "Translation not supported for zh to en." });
+            return;
+          }
+          const translator = await translatorApi.create({
+            sourceLanguage: "zh",
+            targetLanguage: "en"
+          });
+          const translatedText = await translator.translate(message.text);
+          sendResponse({ ok: true, translation: translatedText });
+        } catch (err) {
+          console.error("[YCR:Offscreen] Translation error:", err);
+          sendResponse({ ok: false, error: err.message || String(err) });
+        }
+      })();
+      return true;
+    }
     if (message.action !== "OFFSCREEN_OCR_RECOGNIZE") return;
     (async () => {
       try {

@@ -45,29 +45,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           return;
         }
 
-        const translatorApi = (self.ai && self.ai.translator) || self.translation;
-        if (!translatorApi) {
-          sendResponse({ ok: false, error: 'Translation API not available in this browser.' });
-          return;
-        }
-
-        const canTranslate = await translatorApi.canTranslate({
-          sourceLanguage: 'zh',
-          targetLanguage: 'en',
+        console.log('[YCR:SW] Ensuring offscreen document for translation...');
+        await ensureOffscreenDocument();
+        const response = await chrome.runtime.sendMessage({
+          action: 'OFFSCREEN_TRANSLATE_TEXT',
+          text: message.text,
         });
-
-        if (canTranslate === 'no') {
-          sendResponse({ ok: false, error: 'Translation not supported for zh to en.' });
-          return;
-        }
-
-        const translator = await translatorApi.create({
-          sourceLanguage: 'zh',
-          targetLanguage: 'en',
-        });
-
-        const translatedText = await translator.translate(message.text);
-        sendResponse({ ok: true, translation: translatedText });
+        sendResponse(response || { ok: false, error: 'No response from offscreen translation' });
       } catch (err) {
         console.error('[YCR:SW] Translation error:', err);
         sendResponse({ ok: false, error: err.message || String(err) });
