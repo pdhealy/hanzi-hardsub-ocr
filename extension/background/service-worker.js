@@ -45,13 +45,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           return;
         }
 
-        console.log('[YCR:SW] Ensuring offscreen document for translation...');
-        await ensureOffscreenDocument();
-        const response = await chrome.runtime.sendMessage({
-          action: 'OFFSCREEN_TRANSLATE_TEXT',
-          text: message.text,
-        });
-        sendResponse(response || { ok: false, error: 'No response from offscreen translation' });
+        if (message.provider === 'web') {
+          console.log('[YCR:SW] Translating via web endpoint...');
+          const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=zh-CN&tl=en&dt=t&q=${encodeURIComponent(message.text)}`;
+          const res = await fetch(url);
+          if (!res.ok) {
+            throw new Error(`Web translation failed with status: ${res.status}`);
+          }
+          const data = await res.json();
+          let translatedText = '';
+          if (data && data[0]) {
+            data[0].forEach(item => {
+              if (item[0]) translatedText += item[0];
+            });
+          }
+          sendResponse({ ok: true, translation: translatedText });
+        } else {
+          console.log('[YCR:SW] Ensuring offscreen document for local translation...');
+          await ensureOffscreenDocument();
+          const response = await chrome.runtime.sendMessage({
+            action: 'OFFSCREEN_TRANSLATE_TEXT',
+            text: message.text,
+          });
+          sendResponse(response || { ok: false, error: 'No response from offscreen translation' });
+        }
       } catch (err) {
         console.error('[YCR:SW] Translation error:', err);
         sendResponse({ ok: false, error: err.message || String(err) });

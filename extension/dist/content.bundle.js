@@ -25406,7 +25406,8 @@ input:checked + .ycr-slider:before {
     ycrBgOpacity: 1,
     ycrPinyinToggle: false,
     ycrZhuyinToggle: false,
-    ycrActiveToggles: []
+    ycrActiveToggles: [],
+    ycrTranslationProvider: "local"
   };
   var SidePanel = class {
     constructor() {
@@ -25423,6 +25424,7 @@ input:checked + .ycr-slider:before {
       this.activeToggles = [];
       this.pinyinEnabled = false;
       this.zhuyinEnabled = false;
+      this.translationProvider = "local";
       this._init();
     }
     _init() {
@@ -25502,6 +25504,24 @@ input:checked + .ycr-slider:before {
           </div>
         </div>
       </div>
+      <div class="ycr-settings-section" style="margin-top: 16px;">
+        <div class="ycr-settings-section-header">
+          <span>Translation Settings</span>
+          <span class="ycr-settings-section-icon">+</span>
+        </div>
+        <div class="ycr-settings-section-content" style="display: none;">
+          <div class="ycr-settings-group">
+            <label style="display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; cursor: pointer;">
+              <input type="radio" name="ycr-translation-provider" value="local" style="margin-top: 2px;">
+              <span style="font-weight: 500; line-height: 1.4;">Chrome Built-in AI<br><span style="font-size: 11px; color: #6B7280; font-weight: 400;">Local, offline, requires flags</span></span>
+            </label>
+            <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer;">
+              <input type="radio" name="ycr-translation-provider" value="web" style="margin-top: 2px;">
+              <span style="font-weight: 500; line-height: 1.4;">Google Translate (Web)<br><span style="font-size: 11px; color: #6B7280; font-weight: 400;">Cloud-based, higher accuracy</span></span>
+            </label>
+          </div>
+        </div>
+      </div>
     `;
       settingsMenu.querySelectorAll(".ycr-settings-section-header").forEach((header2) => {
         header2.addEventListener("click", () => {
@@ -25540,6 +25560,7 @@ input:checked + .ycr-slider:before {
       const bgOpacityVal = settingsMenu.querySelector("#ycr-bg-opacity-val");
       const pinyinToggle = settingsMenu.querySelector("#ycr-pinyin-toggle");
       const zhuyinToggle = settingsMenu.querySelector("#ycr-zhuyin-toggle");
+      const transProviderInputs = settingsMenu.querySelectorAll('input[name="ycr-translation-provider"]');
       const updateSettingsStorage = () => {
         const newSettings = {
           ycrFontSize: parseInt(fontSizeInput.value, 10),
@@ -25547,7 +25568,8 @@ input:checked + .ycr-slider:before {
           ycrBgOpacity: parseFloat(bgOpacityInput.value),
           ycrPinyinToggle: pinyinToggle.checked,
           ycrZhuyinToggle: zhuyinToggle.checked,
-          ycrActiveToggles: this.activeToggles
+          ycrActiveToggles: this.activeToggles,
+          ycrTranslationProvider: this.translationProvider
         };
         chrome.storage.sync.set(newSettings);
       };
@@ -25571,6 +25593,14 @@ input:checked + .ycr-slider:before {
         this._updateToggles("zhuyin", e.target.checked);
         updateSettingsStorage();
       });
+      transProviderInputs.forEach((input) => {
+        input.addEventListener("change", (e) => {
+          if (e.target.checked) {
+            this.translationProvider = e.target.value;
+            updateSettingsStorage();
+          }
+        });
+      });
       chrome.storage.sync.get(DEFAULT_SETTINGS, (settings) => {
         fontSizeInput.value = settings.ycrFontSize;
         fontSizeVal.textContent = settings.ycrFontSize + "px";
@@ -25583,6 +25613,10 @@ input:checked + .ycr-slider:before {
         this.pinyinEnabled = settings.ycrPinyinToggle;
         this.zhuyinEnabled = settings.ycrZhuyinToggle;
         this.activeToggles = settings.ycrActiveToggles || [];
+        this.translationProvider = settings.ycrTranslationProvider || "local";
+        transProviderInputs.forEach((input) => {
+          input.checked = input.value === this.translationProvider;
+        });
         this._reRenderAllEntries();
       });
       const controls = document.createElement("div");
@@ -25632,7 +25666,11 @@ input:checked + .ycr-slider:before {
             }
             if (index >= 0 && this._entries[index]) {
               const originalText = this._entries[index].text;
-              chrome.runtime.sendMessage({ action: "TRANSLATE_TEXT", text: originalText }, (response) => {
+              chrome.runtime.sendMessage({
+                action: "TRANSLATE_TEXT",
+                text: originalText,
+                provider: this.translationProvider
+              }, (response) => {
                 if (chrome.runtime.lastError) {
                   transEl.textContent = "Translation failed: " + chrome.runtime.lastError.message;
                 } else if (response && response.ok) {
@@ -25682,7 +25720,7 @@ input:checked + .ycr-slider:before {
       window.addEventListener("yt-navigate-finish", this._onNavigate);
       this.loadSettings();
       this._onStorageChange = (changes) => {
-        const keys = ["ycrFontSize", "ycrFontColor", "ycrBgOpacity", "ycrPinyinToggle", "ycrZhuyinToggle", "ycrActiveToggles"];
+        const keys = ["ycrFontSize", "ycrFontColor", "ycrBgOpacity", "ycrPinyinToggle", "ycrZhuyinToggle", "ycrActiveToggles", "ycrTranslationProvider"];
         if (keys.some((k) => k in changes)) {
           const updated = {};
           for (const k of keys) {
@@ -25695,7 +25733,14 @@ input:checked + .ycr-slider:before {
             this.pinyinEnabled = settings.ycrPinyinToggle;
             this.zhuyinEnabled = settings.ycrZhuyinToggle;
             this.activeToggles = settings.ycrActiveToggles || [];
-            if (changes.ycrPinyinToggle || changes.ycrZhuyinToggle || changes.ycrActiveToggles) {
+            this.translationProvider = settings.ycrTranslationProvider || "local";
+            if (this._panel) {
+              const inputs = this._panel.querySelectorAll('input[name="ycr-translation-provider"]');
+              inputs.forEach((input) => {
+                input.checked = input.value === this.translationProvider;
+              });
+            }
+            if (changes.ycrPinyinToggle || changes.ycrZhuyinToggle || changes.ycrActiveToggles || changes.ycrTranslationProvider) {
               this._reRenderAllEntries();
             }
           });
@@ -25762,11 +25807,36 @@ input:checked + .ycr-slider:before {
     }
     _reRenderAllEntries() {
       if (!this._listEl || !this._entries) return;
+      const expandedIndices = /* @__PURE__ */ new Set();
+      Array.from(this._listEl.children).forEach((el, idx) => {
+        if (el.classList.contains("expanded")) expandedIndices.add(idx);
+      });
       this._listEl.innerHTML = "";
-      for (const { timestamp, text } of this._entries) {
+      for (let i = 0; i < this._entries.length; i++) {
+        const { timestamp, text } = this._entries[i];
         const entry = document.createElement("div");
         entry.className = "ycr-entry";
         entry.innerHTML = this._generateEntryHTML(timestamp, text);
+        if (expandedIndices.has(i)) {
+          entry.classList.add("expanded");
+          const transEl = document.createElement("div");
+          transEl.className = "ycr-translation";
+          transEl.textContent = "Translating...";
+          entry.appendChild(transEl);
+          chrome.runtime.sendMessage({
+            action: "TRANSLATE_TEXT",
+            text,
+            provider: this.translationProvider
+          }, (response) => {
+            if (chrome.runtime.lastError) {
+              transEl.textContent = "Translation failed: " + chrome.runtime.lastError.message;
+            } else if (response && response.ok) {
+              transEl.textContent = response.translation;
+            } else {
+              transEl.textContent = "Translation failed: " + (response ? response.error : "Unknown error");
+            }
+          });
+        }
         this._listEl.appendChild(entry);
       }
     }
