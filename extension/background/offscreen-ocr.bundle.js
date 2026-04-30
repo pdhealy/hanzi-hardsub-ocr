@@ -10938,17 +10938,27 @@ ${u}`, c = n.createShaderModule({ code: d, label: e.name });
     if (message.action === "OFFSCREEN_TRANSLATE_TEXT") {
       (async () => {
         try {
-          const translatorApi = window.ai && window.ai.translator || window.translation;
+          const translatorApi = window.ai && window.ai.translator || window.translation || window.chrome && window.chrome.aiOriginTrial && window.chrome.aiOriginTrial.translator;
           if (!translatorApi) {
-            sendResponse({ ok: false, error: "Translation API not available in this browser" });
+            sendResponse({ ok: false, error: "Translation API not available in this browser. Check chrome://flags/#translation-api" });
             return;
           }
-          const canTranslate = await translatorApi.canTranslate({
-            sourceLanguage: "zh",
-            targetLanguage: "en"
-          });
-          if (canTranslate === "no") {
-            sendResponse({ ok: false, error: "Translation not supported for zh to en." });
+          let isSupported = false;
+          if (typeof translatorApi.capabilities === "function") {
+            const caps = await translatorApi.capabilities();
+            isSupported = caps && caps.available !== "no";
+          } else if (typeof translatorApi.canTranslate === "function") {
+            const canTrans = await translatorApi.canTranslate({
+              sourceLanguage: "zh",
+              targetLanguage: "en"
+            });
+            isSupported = canTrans !== "no";
+          } else {
+            sendResponse({ ok: false, error: "Translation API found but missing capabilities/canTranslate methods." });
+            return;
+          }
+          if (!isSupported) {
+            sendResponse({ ok: false, error: "Translation not supported for zh to en. Check language packs." });
             return;
           }
           const translator = await translatorApi.create({

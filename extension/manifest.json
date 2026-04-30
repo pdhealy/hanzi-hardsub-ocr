@@ -3,7 +3,7 @@
   "name": "YouTube Chinese Reader",
   "version": "1.0.0",
   "description": "OCR hard-coded Chinese subtitles on YouTube videos",
-  "permissions": ["activeTab", "scripting", "storage", "offscreen"],
+  "permissions": ["activeTab", "scripting", "storage", "offscreen", "aiLanguageModelOriginTrial"],
   "host_permissions": ["https://www.youtube.com/*"],
   "background": {
     "service_worker": "background/service-worker.js"
