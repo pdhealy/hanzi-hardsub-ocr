@@ -178,6 +178,32 @@ const PANEL_STYLES = `
   line-height: 1.5;
   color: #111827;
   word-break: break-word;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.ycr-entry:hover {
+  background-color: #F3F4F6;
+}
+
+.ycr-entry.expanded {
+  background-color: #EFF6FF;
+}
+
+.ycr-translation {
+  display: none;
+  font-size: 13px;
+  color: #4B5563;
+  margin-top: 6px;
+  padding-left: 8px;
+  border-left: 2px solid #93C5FD;
+  font-style: italic;
+}
+
+.ycr-entry.expanded .ycr-translation {
+  display: block;
 }
 
 .ycr-ts {
@@ -641,7 +667,45 @@ export class SidePanel {
     const content = document.createElement('div');
     content.id = 'ycr-panel-content';
     content.setAttribute('aria-live', 'polite');
-    
+
+    content.addEventListener('click', (e) => {
+      const entry = e.target.closest('.ycr-entry');
+      if (!entry) return;
+
+      const isExpanded = entry.classList.toggle('expanded');
+      let transEl = entry.querySelector('.ycr-translation');
+
+      if (isExpanded) {
+        if (!transEl) {
+          transEl = document.createElement('div');
+          transEl.className = 'ycr-translation';
+          transEl.textContent = 'Translating...';
+          entry.appendChild(transEl);
+
+          // Get the original text from this._entries using the index
+          let index = -1;
+          if (this._listEl) {
+            index = Array.from(this._listEl.children).indexOf(entry);
+          }
+          
+          if (index >= 0 && this._entries[index]) {
+            const originalText = this._entries[index].text;
+            chrome.runtime.sendMessage({ action: 'TRANSLATE_TEXT', text: originalText }, (response) => {
+              if (chrome.runtime.lastError) {
+                transEl.textContent = 'Translation failed: ' + chrome.runtime.lastError.message;
+              } else if (response && response.ok) {
+                transEl.textContent = response.translation;
+              } else {
+                transEl.textContent = 'Translation failed: ' + (response ? response.error : 'Unknown error');
+              }
+            });
+          } else {
+            transEl.textContent = 'Could not find original text for translation.';
+          }
+        }
+      }
+    });
+
     // Bottom Controls area
     const bottomControls = document.createElement('div');
     bottomControls.id = 'ycr-bottom-controls';

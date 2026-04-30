@@ -37,6 +37,45 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return;
   }
 
+  if (message.action === 'TRANSLATE_TEXT') {
+    (async () => {
+      try {
+        if (!message.text) {
+          sendResponse({ ok: false, error: 'Missing text' });
+          return;
+        }
+
+        const translatorApi = (self.ai && self.ai.translator) || self.translation;
+        if (!translatorApi) {
+          sendResponse({ ok: false, error: 'Translation API not available in this browser.' });
+          return;
+        }
+
+        const canTranslate = await translatorApi.canTranslate({
+          sourceLanguage: 'zh',
+          targetLanguage: 'en',
+        });
+
+        if (canTranslate === 'no') {
+          sendResponse({ ok: false, error: 'Translation not supported for zh to en.' });
+          return;
+        }
+
+        const translator = await translatorApi.create({
+          sourceLanguage: 'zh',
+          targetLanguage: 'en',
+        });
+
+        const translatedText = await translator.translate(message.text);
+        sendResponse({ ok: true, translation: translatedText });
+      } catch (err) {
+        console.error('[YCR:SW] Translation error:', err);
+        sendResponse({ ok: false, error: err.message || String(err) });
+      }
+    })();
+    return true;
+  }
+
   if (message.action === 'OCR_RECOGNIZE_IMAGE') {
     (async () => {
       try {
