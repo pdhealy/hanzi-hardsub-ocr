@@ -15,7 +15,7 @@
   "dependencies": {
     "@tesseract.js-data/chi_sim": "^1.0.0",
     "@tesseract.js-data/chi_tra": "^1.0.0",
-    "onnxruntime-web": "^1.24.3",
+    "onnxruntime-web": "^1.31.1",
     "opencc-js": "^1.0.5",
     "pinyin-pro": "^3.28.1",
     "pinyin-zhuyin": "^1.0.4",
