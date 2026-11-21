@@ -1,52 +1,28 @@
 {
   "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node .claude/hooks/gsd-check-update.js"
-          }
-        ]
-      }
-    ],
     "PostToolUse": [
       {
-        "matcher": "Bash|Edit|Write|MultiEdit|Agent|Task",
+        "matcher": "*",
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/gsd-context-monitor.js",
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "matcher": "Bash|Write|Edit|MultiEdit|Read|Glob|Grep|Agent|Task|WebFetch|WebSearch|NotebookEdit|TodoWrite|TodoRead",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "mkdir -p /workspace/docs/commands && jq -r '\"[\" + (now | strftime(\"%Y-%m-%d %H:%M:%S\")) + \"] \" + .tool_name + \" | \" + (if .tool_input.command then .tool_input.command elif .tool_input.file_path then .tool_input.file_path elif .tool_input.pattern then (\"pattern=\" + .tool_input.pattern) else (.tool_input | tojson | .[0:200]) end)' >> /workspace/docs/commands/command.log 2>/dev/null || true",
-            "async": true
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/run-audit.sh\"",
+            "timeout": 5
           }
         ]
       }
     ],
-    "PreToolUse": [
+    "PostToolUseFailure": [
       {
-        "matcher": "Write|Edit",
+        "matcher": "*",
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/gsd-prompt-guard.js",
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/run-audit.sh\"",
             "timeout": 5
           }
         ]
       }
     ]
-  },
-  "statusLine": {
-    "type": "command",
-    "command": "node .claude/hooks/gsd-statusline.js"
   }
 }

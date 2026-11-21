@@ -9,6 +9,19 @@ module.exports = [
     ],
   },
   {
+    files: ['.copilot/hooks/*.cjs', '.claude/hooks/*.cjs', 'tests/audit-hooks.test.cjs'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'commonjs',
+      globals: globals.node,
+    },
+    rules: {
+      'no-unused-vars': 'error',
+      'no-undef': 'error',
+      semi: ['error', 'always'],
+    },
+  },
+  {
     files: ['extension/**/*.js'],
     languageOptions: {
       ecmaVersion: 2022,

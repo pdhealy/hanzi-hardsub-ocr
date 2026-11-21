@@ -1,0 +1,7 @@
+{
+  "name": "aicode-devcontainer-tools",
+  "private": true,
+  "dependencies": {
+    "@openai/codex": "0.167.1"
+  }
+}
